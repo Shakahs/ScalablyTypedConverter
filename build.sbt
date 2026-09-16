@@ -13,8 +13,8 @@ ThisBuild / libraryDependencySchemes ++= Seq(
   "org.scala-lang.modules" %% "scala-collection-compat" % VersionScheme.Always,
 )
 
-lazy val scala212 = "2.12.20"
-lazy val scala3   = "3.9.0"
+lazy val scala212 = Versions.scala212
+lazy val scala3   = Versions.scala3
 
 val scala2Versions:     Seq[String] = Seq(scala212)
 val scala2And3Versions: Seq[String] = scala2Versions ++ Seq(scala3)
@@ -107,6 +107,16 @@ lazy val scalajs = projectMatrix
   .dependsOn(core, logging)
   .configure(baseSettings, optimize)
   .settings(libraryDependencies ++= Seq(Deps.scalaXml))
+  .enablePlugins(BuildInfoPlugin)
+  .settings(
+    buildInfoPackage := "org.scalablytyped.converter.internal.scalajs",
+    buildInfoKeys := Seq[BuildInfoKey](
+      "scala212" -> Versions.scala212,
+      "scala213" -> Versions.scala213,
+      "scala3"   -> Versions.scala3,
+      "scalaJs"  -> Versions.scalaJs,
+    ),
+  )
 
 lazy val phases = projectMatrix
   .in(file("phases"))
@@ -183,7 +193,7 @@ lazy val `sbt-converter` = projectMatrix
     name := "sbt-converter",
     sbtPlugin := true,
     addSbtPlugin("ch.epfl.scala" % "sbt-scalajs-bundler" % "0.21.1"),
-    addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.20.1"),
+    addSbtPlugin("org.scala-js" % "sbt-scalajs" % Versions.scalaJs),
     scriptedBufferLog := false,
     scriptedLaunchOpts ++= Seq("-Xmx2048M", "-Dplugin.version=" + version.value),
     watchSources ++= {
@@ -207,7 +217,7 @@ lazy val `import-scalajs-definitions` = projectMatrix
           )
         case _ => // Scala 3
           List(
-            "org.scala-lang" % "scalap" % "2.13.16",
+            "org.scala-lang" % "scalap" % Versions.scala213,
             Deps.coursier.cross(CrossVersion.for3Use2_13).exclude("org.scala-lang.modules", "scala-xml_2.13"),
           )
       }

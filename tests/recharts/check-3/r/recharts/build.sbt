@@ -1,7 +1,7 @@
 organization := "org.scalablytyped"
 name := "recharts"
-version := "0.0-unknown-615d27"
-scalaVersion := "3.3.6"
+version := "0.0-unknown-2653eb"
+scalaVersion := "3.9.0"
 enablePlugins(ScalaJSPlugin)
 libraryDependencies ++= Seq(
   "com.olvind" %%% "scalablytyped-runtime" % "2.4.2")
