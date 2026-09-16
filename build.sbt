@@ -14,7 +14,7 @@ ThisBuild / libraryDependencySchemes ++= Seq(
 )
 
 lazy val scala212 = "2.12.20"
-lazy val scala3   = "3.3.4"
+lazy val scala3   = "3.9.0"
 
 val scala2Versions:     Seq[String] = Seq(scala212)
 val scala2And3Versions: Seq[String] = scala2Versions ++ Seq(scala3)
