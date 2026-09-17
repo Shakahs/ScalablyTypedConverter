@@ -9,7 +9,7 @@ import org.scalablytyped.converter.internal.seqs._
   * Sort parents to ensure that if we inherit from a class it
   * goes first, and traits are mixins
   */
-class RemoveMultipleInheritance(parentsResolver: ParentsResolver) extends TreeTransformation {
+class RemoveMultipleInheritance(parentsResolver: ParentsResolver, erasure: Erasure) extends TreeTransformation {
 
   case class Dropped(typeRef: TypeRef, because: String, members: IArray[Tree])
 
@@ -50,10 +50,12 @@ class RemoveMultipleInheritance(parentsResolver: ParentsResolver) extends TreeTr
 
     val (changes, ps) =
       step(
-        included         = Empty,
-        newParents       = Empty,
-        dropped          = IArray.Empty,
-        remainingParents = remaining,
+        scope                 = scope / c,
+        included              = Empty,
+        includedMethodsByBase = Map.empty,
+        newParents            = Empty,
+        dropped               = IArray.Empty,
+        remainingParents      = remaining,
       )
 
     val classParentAnnotation = foundClassParent.map(_ => Marker.HasClassParent)
@@ -81,11 +83,25 @@ class RemoveMultipleInheritance(parentsResolver: ParentsResolver) extends TreeTr
     parents.directParents.find(p => go(p).isDefined)
   }
 
+  /* erased bases of every method inlined so far (from dropped parents) or inherited from included
+   * parents, accumulated as `step` walks the candidates so no parent is re-erased later */
+  private def addMethodBases(
+      scope:   TreeScope,
+      current: Map[MethodBase, IArray[MethodTree]],
+      members: IArray[Tree],
+  ): Map[MethodBase, IArray[MethodTree]] =
+    members.collect { case m: MethodTree => m }.foldLeft(current) { (acc, m) =>
+      val base = erasure.base(scope)(m)
+      acc.updated(base, acc.getOrElse(base, Empty) :+ m)
+    }
+
   def step(
-      included:         IArray[Parent],
-      newParents:       IArray[TypeRef],
-      dropped:          IArray[Dropped],
-      remainingParents: IArray[Parent],
+      scope:                 TreeScope,
+      included:              IArray[Parent],
+      includedMethodsByBase: Map[MethodBase, IArray[MethodTree]],
+      newParents:            IArray[TypeRef],
+      dropped:               IArray[Dropped],
+      remainingParents:      IArray[Parent],
   ): (IArray[Dropped], IArray[TypeRef]) =
     remainingParents match {
       case IArray.Empty =>
@@ -161,11 +177,63 @@ class RemoveMultipleInheritance(parentsResolver: ParentsResolver) extends TreeTr
           }
         }
 
-        inheritsClass.orElse(alreadyInherits).orElse(alreadyInheritsUnresolved).orElse(inheritsConflictingVars) match {
-          case None => step(currentParent +: included, currentParent.refs.last +: newParents, dropped, rest)
+        /* A class cannot override two inherited methods that erase alike but take different parameter types, so it
+         * could implement neither. TypeScript allows it, since there a parameter type only has to be assignable. */
+        def inheritsConflictingMethods: Option[Dropped] = {
+          val conflicting: IArray[MethodTree] =
+            currentParent.members.collect { case m: MethodTree => m }.filter { m =>
+              includedMethodsByBase
+                .get(erasure.base(scope)(m))
+                .exists(
+                  _.exists(existing => existing.params.flatten.map(_.tpe) =/= m.params.flatten.map(_.tpe)),
+                )
+            }
+
+          conflicting match {
+            case Empty => None
+            case conflict =>
+              val conflictString =
+                conflict.map(_.name).distinct.sortBy(_.unescaped).map(Printer.formatName).mkString(", ")
+              val includedNames: Set[Name] =
+                includedMethodsByBase.valuesIterator.flatMap(_.toVector).map(_.name).toSet
+              val inlined =
+                currentParent.classTree.members.filterNot(m =>
+                  includedNames(m.name) || conflict.exists(_.name === m.name),
+                )
+              Some(
+                Dropped(
+                  currentParent.refs.last,
+                  s"method conflicts: $conflictString. Inlined ${inlined.map(_.name.value).mkString(", ")}",
+                  inlined,
+                ),
+              )
+          }
+        }
+
+        inheritsClass
+          .orElse(alreadyInherits)
+          .orElse(alreadyInheritsUnresolved)
+          .orElse(inheritsConflictingVars)
+          .orElse(inheritsConflictingMethods) match {
+          case None =>
+            step(
+              scope,
+              currentParent +: included,
+              addMethodBases(scope, includedMethodsByBase, currentParent.members),
+              currentParent.refs.last +: newParents,
+              dropped,
+              rest,
+            )
           case Some(d) =>
             val newRemaining = currentParent.parents.filterNot(included.contains).filterNot(rest.contains)
-            step(included, newParents, d +: dropped, rest ++ newRemaining)
+            step(
+              scope,
+              included,
+              addMethodBases(scope, includedMethodsByBase, d.members),
+              newParents,
+              d +: dropped,
+              rest ++ newRemaining,
+            )
         }
     }
 }

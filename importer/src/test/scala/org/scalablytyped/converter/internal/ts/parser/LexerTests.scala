@@ -62,6 +62,23 @@ final class LexerTests extends AnyFunSuite with Matchers {
     )
   }
 
+  test("template with escapes") {
+    shouldParseAs("`\\`a\\`${b}\\${c}`", TsLexer.stringTemplateLiteral)(
+      TsLexer.StringTemplateLiteral(
+        List(
+          Left('`'),
+          Left('a'),
+          Left('`'),
+          Right(List(TsLexer.Identifier("b"))),
+          Left('$'),
+          Left('{'),
+          Left('c'),
+          Left('}'),
+        ),
+      ),
+    )
+  }
+
   test("nested template strings") {
     val nested = TsLexer.StringTemplateLiteral(
       List(

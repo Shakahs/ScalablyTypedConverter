@@ -39,11 +39,14 @@ class FilterMemberOverrides(erasure: Erasure, parentsResolver: ParentsResolver) 
     val fieldsByName: Map[Name, IArray[FieldTree]] =
       fields.groupBy(_.name)
 
-    val parents: Map[TypeRef, ClassTree] =
+    val resolvedParents: Option[ParentsResolver.Parents] =
       owner match {
-        case x: InheritanceTree => parentsResolver(scope, x).transitiveParents
-        case _ => Map.empty
+        case x: InheritanceTree => Some(parentsResolver(scope, x))
+        case _ => None
       }
+
+    val parents: Map[TypeRef, ClassTree] =
+      resolvedParents.fold(Map.empty[TypeRef, ClassTree])(_.transitiveParents)
 
     val (inheritedMethods, inheritedFields, _) =
       (ScalaJsClasses.jsObjectMembers ++ IArray.fromTraversable(parents).flatMap(_._2.members)).partitionCollect2(
@@ -59,6 +62,35 @@ class FilterMemberOverrides(erasure: Erasure, parentsResolver: ParentsResolver) 
 
     val inheritedMethodsByName: Map[Name, IArray[MethodTree]] =
       inheritedMethods.groupBy(_.name)
+
+    /* Scala erases an inherited method as its declaring class declares it, not with our type arguments filled in.
+     * `def m(p: P)` in `class A[P]` erases to `m(Object)` even where we inherit `A[Foo]`, so a
+     * `def m(p: Q)` of our own clashes with it although the filled-in signatures differ. */
+    val inheritedDeclaredBases: Set[MethodBase] = {
+      /* diamond inheritance reaches the same declaring class along every path, and its erasure is
+       * independent of the type arguments supplied at each use site, so visit each class once */
+      def declared(
+          acc:    (Set[QualifiedName], Set[MethodBase]),
+          parent: ParentsResolver.Parent,
+      ): (Set[QualifiedName], Set[MethodBase]) = {
+        val (visited, bases) = acc
+        val codePath         = parent.classTree.codePath
+        if (visited(codePath)) acc
+        else {
+          val own = parent.foundIn
+            .lookup(codePath)
+            .collectFirst {
+              case (cls: ClassTree, clsScope) =>
+                cls.members.collect { case m: MethodTree => erasure.base(clsScope / cls)(m) }
+            }
+            .getOrElse(Empty)
+          parent.parents.foldLeft((visited + codePath, own.foldLeft(bases)(_ + _)))(declared)
+        }
+      }
+      resolvedParents.fold(Set.empty[MethodBase]) {
+        _.directParents.foldLeft((Set.empty[QualifiedName], Set.empty[MethodBase]))(declared)._2
+      }
+    }
 
     val allMethods = inheritedMethodsByName ++ methodsByName
     val allFields  = inheritedFieldsByName ++ fieldsByName
@@ -117,8 +149,9 @@ class FilterMemberOverrides(erasure: Erasure, parentsResolver: ParentsResolver) 
       case m =>
         val mBase = erasure.base(scope)(m)
         inheritedMethodsByBase.get(mBase) match {
-          case Some(conflicting @ _) => Empty
-          case _                     => IArray(m)
+          case Some(conflicting @ _)                          => Empty
+          case None if inheritedDeclaredBases.contains(mBase) => Empty
+          case _                                              => IArray(m)
         }
     }
 

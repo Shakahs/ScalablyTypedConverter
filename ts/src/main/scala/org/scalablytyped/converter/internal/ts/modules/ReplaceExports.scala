@@ -114,8 +114,33 @@ class ReplaceExports(loopDetector: LoopDetector) extends TreeTransformationScope
       jsLocation: ModuleSpec => JsLocation,
       trees:      IArray[TsContainerOrDecl],
   ): IArray[TsContainerOrDecl] = {
-    val (canBeShadowed, canNotBe) = trees.map(newMember(scope, owner, jsLocation)).partition(_.maybe)
-    val keep                      = canNotBe.flatMap(_.trees)
+    /* `export { A as B }` and `export { B } from 'x'` export a declaration other than a local `B`, which TypeScript
+     * lets the module declare privately beside it. References inside the module mean the local one, and a Scala
+     * package can hold only one `B`, so the local declaration wins instead of both merging into one incoherent tree. */
+    val localNames: Set[TsIdent] =
+      trees.collect { case x: TsNamedDecl => x.name }.toSet
+
+    def withoutShadowedReexports(tree: TsContainerOrDecl, expanded: CanBeShadowed): CanBeShadowed =
+      tree match {
+        case TsExport(_, _, ExportType.Named, TsExportee.Names(idents, fromOpt)) =>
+          val foreign: Set[TsIdent] =
+            idents.collect {
+              case (qident, rename) if fromOpt.isDefined || rename.exists(r => (r: TsIdent) =/= qident.parts.last) =>
+                rename.getOrElse(qident.parts.last): TsIdent
+            }.toSet
+          val shadowed = foreign.intersect(localNames)
+          if (shadowed.isEmpty) expanded
+          else
+            expanded.copy(trees = expanded.trees.filter {
+              case x: TsNamedDecl => !shadowed(x.name)
+              case _ => true
+            })
+        case _ => expanded
+      }
+
+    val (canBeShadowed, canNotBe) =
+      trees.map(tree => withoutShadowedReexports(tree, newMember(scope, owner, jsLocation)(tree))).partition(_.maybe)
+    val keep = canNotBe.flatMap(_.trees)
     val keepMaybe = {
       val takenName = keep.collect { case x: TsNamedDecl => x.name }.toSet
       canBeShadowed.flatMap(_.trees.filter {

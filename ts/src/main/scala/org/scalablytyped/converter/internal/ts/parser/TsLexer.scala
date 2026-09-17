@@ -127,8 +127,12 @@ object TsLexer extends Lexical with StdTokens with ParserHelpers with ImplicitCo
     val interpolationEnd:   Parser[Char] = '}'
     val nonInterpolationEndToken = token.filter { case Keyword("}") => false; case _ => true }
 
+    /* an escaped character, notably \` and \$, is text and never ends the literal or starts an interpolation */
+    val escaped: Parser[Char] = '\\' ~> elem("escaped character", _ => true)
+
     val either: Parser[Either[Char, List[Token]]] =
       interpolationStart.flatMap(_ => (rep(nonInterpolationEndToken) <~ interpolationEnd).map(Right.apply)) |
+        escaped.map(Left.apply) |
         chrExcept(templateQuote).map(Left.apply)
 
     templateQuote ~> rep(either) <~ templateQuote ^^ StringTemplateLiteral.apply
