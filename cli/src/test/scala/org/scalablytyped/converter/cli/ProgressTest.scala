@@ -29,7 +29,9 @@ class ProgressTest extends AnyFunSuite {
 
     assert(p.current.processed === 1)
     assert(p.current.pending === 2)
-    assert(p.current.render === s"[${"#" * 10}${"-" * 20}] 1/3 packages processed, 2 pending")
+    assert(
+      p.current.render === s"[${"#" * 10}${"-" * 20}] 1/3 packages processed, 2 pending | working: c | waiting: a",
+    )
 
     p.on("build", c, Failure("build", Map(c -> Right("oops"))))
     p.on("build", a, Resumed("build"))
@@ -60,7 +62,7 @@ class ProgressTest extends AnyFunSuite {
     assert(ret === 42)
     assert(
       bytes.toString.linesIterator.toList === List(
-        s"[${"-" * 30}] 0/1 packages processed, 1 pending",
+        s"[${"-" * 30}] 0/1 packages processed, 1 pending | working: a",
         s"[${"#" * 30}] 1/1 packages processed, 0 pending",
       ),
     )
