@@ -109,7 +109,7 @@ lazy val cli = project
   .dependsOn(importer)
   .configure(baseSettings)
   .settings(
-    libraryDependencies += Deps.scopt,
+    libraryDependencies ++= Seq(Deps.scopt, Deps.scalatest % Test),
   )
 
 lazy val `import-scalajs-definitions` = project

@@ -5,7 +5,6 @@ import fansi.{Attr, Color, Str}
 import org.scalablytyped.converter.internal.importer._
 import org.scalablytyped.converter.internal.importer.build.{PublishedSbtProject, SbtProject, ScalaCliCompiler}
 import org.scalablytyped.converter.internal.importer.documentation.Npmjs
-import org.scalablytyped.converter.internal.phases.PhaseListener.NoListener
 import org.scalablytyped.converter.internal.phases.{PhaseRes, PhaseRunner, RecPhase}
 import org.scalablytyped.converter.internal.scalajs.{Name, Versions}
 import org.scalablytyped.converter.internal.sets.SetOps
@@ -65,7 +64,7 @@ object Main {
     inDirectory    = os.pwd,
     includeDev     = false,
     includeProject = false,
-    parallelism    = math.min(4, Runtime.getRuntime.availableProcessors),
+    parallelism    = math.max(2, Runtime.getRuntime.availableProcessors),
   )
 
   val parseCachePath = Some(files.existing(constants.defaultCacheFolder / "parse").toNIO)
@@ -194,6 +193,8 @@ object Main {
     Str.join(massaged)
   }
 
+  val BuildPhase = "build"
+
   def main(args: Array[String]): Unit = System.exit(mainNoExit(args))
 
   def mainNoExit(args: Array[String]): Int =
@@ -305,13 +306,13 @@ object Main {
                 generateScalaJsBundlerFile = false,
                 ensureSourceFilesWritten   = true,
               ),
-              "build",
+              BuildPhase,
             )
 
         val results: Map[LibTsSource, PhaseRes[LibTsSource, PublishedSbtProject]] =
-          PhaseRunner
-            .all(Pipeline, (_: LibTsSource) => logger.void, NoListener[LibTsSource], parallelism)(sources)
-            .toMap
+          Progress.showing(trackedPhase = BuildPhase, out = System.out) { progress =>
+            PhaseRunner.all(Pipeline, (_: LibTsSource) => logger.void, progress, parallelism)(sources).toMap
+          }
 
         val td = System.currentTimeMillis - t0
         logger.warn(td)

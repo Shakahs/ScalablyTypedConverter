@@ -134,7 +134,7 @@ object PhaseRunner {
               )
             }
 
-          listener.on(next.name, id, PhaseListener.Started(next.name))
+          listener.on(next.name, id, PhaseListener.Resumed(next.name))
           ret
         }
 

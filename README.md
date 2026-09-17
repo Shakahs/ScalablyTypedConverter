@@ -33,6 +33,6 @@ sbt "cli/run --directory <dir with package.json and node_modules> --flavour scal
 
 Or publish it (`sbt publishM2`) and run `org.scalablytyped.converter.cli.Main` from
 `io.kinoplan.scalablytyped:cli_3`. Run with `--help` to list the options.
-`--parallelism <n>` sets how many libraries are converted at the same time; `1` converts them one by one.
+`--parallelism <n>` sets how many libraries are converted at the same time (default: the number of cores, at least 2); `1` converts them one by one. Progress is printed as packages finish.
 
 Generated facades target Scala 3 by default; pass `--scala 2.13.x` to generate Scala 2.13 code.

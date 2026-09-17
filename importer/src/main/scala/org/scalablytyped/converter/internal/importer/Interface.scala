@@ -36,7 +36,10 @@ object Interface {
     def finish(): Unit = {
       val (status, _) = snapshot()
       require(!status.values.exists { case _: Blocked[LibTsSource] => true; case _ => false })
-      require(!status.values.exists { case _: Started[LibTsSource] => true; case _ => false })
+      require(!status.values.exists {
+        case _: Started[LibTsSource] | _: Resumed[LibTsSource] => true
+        case _ => false
+      })
       hasExited.set(true)
     }
 
@@ -63,9 +66,12 @@ object Interface {
     def render(): Unit = {
       val (status, failed) = snapshot()
       val ignored          = status.collect { case (lib, _: Ignored[LibTsSource]) => lib }
-      val active           = status.collect { case (lib, x: Started[LibTsSource]) => (lib, x) }
-      val blocked          = status.collect { case (lib, x: Blocked[LibTsSource]) => (lib, x) }
-      val succeeded        = status.collect { case (lib, x: Success[LibTsSource]) => lib -> x }
+      val active = status.collect {
+        case (lib, x: Started[LibTsSource]) => (lib, x.phase)
+        case (lib, x: Resumed[LibTsSource]) => (lib, x.phase)
+      }
+      val blocked   = status.collect { case (lib, x: Blocked[LibTsSource]) => (lib, x) }
+      val succeeded = status.collect { case (lib, x: Success[LibTsSource]) => lib -> x }
 
       val sb = new StringBuffer()
       def println(s: String) = sb.append(s).append("\n")
@@ -91,7 +97,7 @@ object Interface {
       row("Seconds per library", processedPerSecond)
 
       println("Active:")
-      active.toVector.map(x => (Color.Green(x._1.value).render, x._2.phase)).sorted.foreach(x => println(x.toString))
+      active.toVector.map(x => (Color.Green(x._1.value).render, x._2)).sorted.foreach(x => println(x.toString))
 
       println("Blocked:")
       blocked.toVector

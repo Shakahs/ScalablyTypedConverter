@@ -10,6 +10,8 @@ object PhaseListener {
   sealed trait Event[Id]
   case class Started[Id](phase: String) extends Event[Id]
   case class Blocked[Id](phase: String, on: Set[Id]) extends Event[Id]
+  /* continues after `Blocked` */
+  case class Resumed[Id](phase: String) extends Event[Id]
   case class Success[Id](phase: String) extends Event[Id]
   case class Failure[Id](phase: String, errors: Map[Id, Either[Throwable, String]]) extends Event[Id]
   case class Ignored[Id]() extends Event[Id]
