@@ -181,7 +181,7 @@ class Phase1ReadTypescript(
             .toMap
             .toSorted
 
-        val preparedFiles: IArray[(TsParsedFile, Set[LibTsSource])] = {
+        val (preparedFiles, parseMs) = timed {
           // evaluate all, don't refactor and combine this with other steps
           val base: SortedMap[InFile, (TsParsedFile, Set[LibTsSource])] =
             source match {
@@ -203,6 +203,7 @@ class Phase1ReadTypescript(
             case (_, fileResult)                         => IArray(fileResult)
           }
         }
+        logger.warn(s"parsed ${includedFiles.length} files in $parseMs ms")
 
         if (preparedFiles.isEmpty) {
           logger.warn(s"No typescript definitions files found for library ${source.libName.value}")
@@ -268,9 +269,12 @@ class Phase1ReadTypescript(
             val react = TsIdentLibrarySimple("react")
             source.libName === react || deps.exists { case (s, _) => s.libName === react }
           }
-          val finished = Phase1ReadTypescript
-            .Pipeline(scope, source.libName, expandTypeMappings, involvesReact)
-            .foldLeft(withFilteredModules) { case (acc, f) => f(acc) }
+          val (finished, transformMs) = timed {
+            Phase1ReadTypescript
+              .Pipeline(scope, source.libName, expandTypeMappings, involvesReact)
+              .foldLeft(withFilteredModules) { case (acc, f) => f(acc) }
+          }
+          logger.warn(s"typescript transforms took $transformMs ms")
 
           val version = calculateLibraryVersion(
             source.folder,

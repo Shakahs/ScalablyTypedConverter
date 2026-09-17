@@ -60,7 +60,9 @@ class Phase3Compile(
           outputPkg     = flavour.outputPkg,
         )
 
-        val scalaFiles    = Printer(scope, new ParentsResolver, lib.packageTree, flavour.outputPkg, versions.scala)
+        val (scalaFiles, printMs) =
+          timed(Printer(scope, new ParentsResolver, lib.packageTree, flavour.outputPkg, versions.scala))
+        logger.warn(s"printed ${scalaFiles.length} scala files in $printMs ms")
         val sourcesDir    = os.RelPath("src") / "main" / "scala"
         val resourcesDir  = os.RelPath("src") / "main" / "resources"
         val metadataOpt   = Try(Await.result(metadataFetcher(lib.source, logger), 2.seconds)).toOption.flatten
@@ -100,7 +102,10 @@ class Phase3Compile(
 
         FileLocking.withLock(lockFile.toNIO) { _ =>
           if (ensureSourceFilesWritten) {
-            files.sync(allFilesProperVersion.all, compilerPaths.baseDir, deleteUnknowns = true, soft = softWrites)
+            val ((), syncMs) = timed(
+              files.sync(allFilesProperVersion.all, compilerPaths.baseDir, deleteUnknowns = true, soft = softWrites),
+            )
+            logger.warn(s"synced sources to ${compilerPaths.baseDir} in $syncMs ms")
           }
 
           if (existing.all.forall { case (_, file) => files.exists(file) }) {
@@ -130,7 +135,8 @@ class Phase3Compile(
             val ret: PhaseRes[LibTsSource, PublishedSbtProject] =
               compiler.compile(lib.libName, digest, compilerPaths, jarDeps, flavour.dependencies) match {
                 case Right(()) =>
-                  val writtenIvyFiles: IvyLayout[os.RelPath, os.Path] =
+                  val compileMs = System.currentTimeMillis - t0
+                  val (writtenIvyFiles, publishMs) = timed(
                     ContentForPublish(
                       v            = versions,
                       paths        = compilerPaths,
@@ -141,10 +147,10 @@ class Phase3Compile(
                       val path = publishLocalFolder / relPath
                       files.softWriteBytes(path, contents)
                       path
-                    }
+                    },
+                  )
 
-                  val elapsed = System.currentTimeMillis - t0
-                  logger.warn(s"Built $jarFile in $elapsed ms")
+                  logger.warn(s"Built $jarFile in $compileMs ms (compile) + $publishMs ms (publish)")
 
                   PhaseRes.Ok(PublishedSbtProject(sbtProject)(compilerPaths.classesDir, writtenIvyFiles, None))
 

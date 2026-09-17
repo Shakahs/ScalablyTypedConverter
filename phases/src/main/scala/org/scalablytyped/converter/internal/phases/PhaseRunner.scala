@@ -2,6 +2,7 @@ package org.scalablytyped.converter.internal
 package phases
 
 import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicLong
 
 import com.olvind.logging.{Formatter, Logger}
 import ox.mapPar
@@ -113,10 +114,13 @@ object PhaseRunner {
         val resLastPhase: PhaseRes[Id, T] =
           go(next.prev, id, Nil, None, getLogger, listener, workers)
 
+        /* time spent inside `calculateDeps`, so the phase's own time can be told apart from waiting */
+        val waitedMs = new AtomicLong(0)
+
         def calculateDeps(newRequestedIds: SortedSet[Id]): PhaseRes[Id, SortedMap[Id, TT]] = {
           listener.on(next.name, id, PhaseListener.Blocked(next.name, newRequestedIds))
 
-          val ret: PhaseRes[Id, SortedMap[Id, TT]] =
+          val (ret, elapsed) = timed {
             workers.waiting {
               PhaseRes.sequenceMap(
                 SortedMap.empty[Id, PhaseRes[Id, TT]] ++
@@ -133,17 +137,24 @@ object PhaseRunner {
                   },
               )
             }
+          }
+          waitedMs.addAndGet(elapsed)
 
           listener.on(next.name, id, PhaseListener.Resumed(next.name))
           ret
         }
 
         val result: PhaseRes[Id, TT] =
-          resLastPhase.flatMap(lastValue =>
-            workers.working(
-              PhaseRes.attempt(id, logger, next.trans(id, lastValue, calculateDeps, isCircular, logger)),
-            ),
-          )
+          resLastPhase.flatMap { lastValue =>
+            val (res, elapsed) = timed {
+              workers.working(
+                PhaseRes.attempt(id, logger, next.trans(id, lastValue, calculateDeps, isCircular, logger)),
+              )
+            }
+            val waited = waitedMs.get
+            logger.warn(s"phase ${next.name} took ${elapsed - waited} ms (waited $waited ms for dependencies)")
+            res
+          }
 
         result match {
           case PhaseRes.Ok(_) =>

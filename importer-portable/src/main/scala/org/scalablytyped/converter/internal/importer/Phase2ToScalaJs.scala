@@ -63,25 +63,28 @@ class Phase2ToScalaJs(
       def erasure()        = new Erasure(scalaVersion)
       def parentResolver() = new ParentsResolver
 
-      val ScalaTransforms = List[PackageTree => PackageTree](
-        (
+      val ScalaTransforms = List[(String, PackageTree => PackageTree)](
+        "CleanupTrivial+ModulesCombine" -> (
           S.CleanupTrivial >> // before ModulesCombine
             S.ModulesCombine
         ).visitPackageTree(scope),
-        new TypeRewriterCast(flavour.rewrites).visitPackageTree(scope),
-        (new S.RemoveDuplicateInheritance(parentResolver()) >>
+        "TypeRewriterCast" -> new TypeRewriterCast(flavour.rewrites).visitPackageTree(scope),
+        "RemoveDuplicateInheritance+CleanIllegalNames+Deduplicator" -> (new S.RemoveDuplicateInheritance(
+          parentResolver(),
+        ) >>
           cleanIllegalNames >>
           S.Deduplicator).visitPackageTree(scope),
-        Adapter(scope)((tree, s) => S.FakeLiterals(outputPkg, s, cleanIllegalNames)(tree)),
-        Adapter(scope)((tree, s) => S.UnionToInheritance(s, tree, scalaName)), // after FakeLiterals
-        S.LimitUnionLength.visitPackageTree(scope), // after UnionToInheritance
-        new S.RemoveMultipleInheritance(parentResolver(), erasure()).visitPackageTree(scope),
-        new S.CombineOverloads(erasure())
+        "FakeLiterals" -> Adapter(scope)((tree, s)       => S.FakeLiterals(outputPkg, s, cleanIllegalNames)(tree)),
+        "UnionToInheritance" -> Adapter(scope)((tree, s) => S.UnionToInheritance(s, tree, scalaName)), // after FakeLiterals
+        "LimitUnionLength" -> S.LimitUnionLength.visitPackageTree(scope), // after UnionToInheritance
+        "RemoveMultipleInheritance" -> new S.RemoveMultipleInheritance(parentResolver(), erasure())
+          .visitPackageTree(scope),
+        "CombineOverloads" -> new S.CombineOverloads(erasure())
           .visitPackageTree(scope), //must have stable types, so FakeLiterals run before
-        new S.FilterMemberOverrides(erasure(), parentResolver()).visitPackageTree(scope), //
-        new S.InferMemberOverrides(erasure(), parentResolver())
+        "FilterMemberOverrides" -> new S.FilterMemberOverrides(erasure(), parentResolver()).visitPackageTree(scope), //
+        "InferMemberOverrides" -> new S.InferMemberOverrides(erasure(), parentResolver())
           .visitPackageTree(scope), //runs in phase after FilterMemberOverrides
-        new S.CompleteClass(erasure(), parentResolver(), scalaVersion)
+        "CompleteClass" -> new S.CompleteClass(erasure(), parentResolver(), scalaVersion)
           .visitPackageTree(scope), //after FilterMemberOverrides
       )
 
@@ -105,8 +108,18 @@ class Phase2ToScalaJs(
         scalaVersion,
       )
 
-      val scalaTree            = importTree(tsLibrary, logger)
-      val transformedScalaTree = ScalaTransforms.foldLeft(scalaTree) { case (acc, f) => f(acc) }
+      val (scalaTree, importMs) = timed(importTree(tsLibrary, logger))
+      logger.warn(s"imported scala tree in $importMs ms")
+
+      val (transformedScalaTree, transformMs) = timed {
+        ScalaTransforms.foldLeft(scalaTree) {
+          case (acc, (name, f)) =>
+            val (ret, elapsed) = timed(f(acc))
+            logger.info(s"transform $name took $elapsed ms")
+            ret
+        }
+      }
+      logger.warn(s"scala.js transforms took $transformMs ms")
 
       LibScalaJs(tsLibrary.source)(
         libName      = tsLibrary.name.`__value`.replaceAll("\\.", "_dot_"),

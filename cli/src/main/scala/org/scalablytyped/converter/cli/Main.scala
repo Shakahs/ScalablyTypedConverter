@@ -256,6 +256,8 @@ object Main {
             "organization" -> conversion.organization,
             "enableLongApplyMethod" -> conversion.enableLongApplyMethod.toString,
             "parallelism" -> parallelism.toString,
+            "maxHeap" -> s"${Runtime.getRuntime.maxMemory / (1024 * 1024)} MB",
+            "processors" -> Runtime.getRuntime.availableProcessors.toString,
           ),
         )
 
