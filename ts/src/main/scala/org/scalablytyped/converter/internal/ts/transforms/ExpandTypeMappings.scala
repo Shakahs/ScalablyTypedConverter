@@ -243,6 +243,8 @@ object ExpandTypeMappings extends TreeTransformationScopedChanges {
       }
 
     val res: Res[Set[TaggedLiteral]] = FollowAliases(scope)(keys) match {
+      // `Record<never, never>` is the empty object type, as in the `string & Record<never, never>` idiom
+      case TsTypeRef.never => Ok(Set.empty, wasRewritten = false)
       case tr: TsTypeRef if scope.isAbstract(tr.name) => Problems(IArray(NotStatic(scope, tr)))
       case tr: TsTypeRef =>
         val res: Option[Res[Set[TaggedLiteral]]] =

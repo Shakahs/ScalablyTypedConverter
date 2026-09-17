@@ -73,6 +73,7 @@ trait ImporterTest extends AnyFunSuite with ImporterHarness with ParallelTestExe
   test("prisma")(assertImportsOk("prisma", pedantic                                 = true))
   test("i18next")(assertImportsOk("i18next", pedantic                               = true))
   test("react-i18next")(assertImportsOk("react-i18next", pedantic                   = true))
+  test("ag-grid-community")(assertImportsOk("ag-grid-community", pedantic           = true))
 
   test("material-ui-slinky")(
     assertImportsOk("material-ui", pedantic = true, flavour = Slinky),
