@@ -110,6 +110,21 @@ lazy val cli = project
   .configure(baseSettings)
   .settings(
     libraryDependencies ++= Seq(Deps.scopt, Deps.scalatest % Test),
+    /* The cli assembles too, so a build can run the converter from one jar instead of resolving it
+     * as a published module. Same merge strategy as the importer above. */
+    assembly / test := {},
+    assembly / mainClass := Some("org.scalablytyped.converter.cli.Main"),
+    assembly / assemblyMergeStrategy := {
+      case foo if foo.contains("io/github/soc/directories/")         => MergeStrategy.first
+      case foo if foo.contains("reflect.properties")                 => MergeStrategy.first
+      case foo if foo.contains("scala-collection-compat.properties") => MergeStrategy.first
+      case foo if foo.endsWith("module-info.class")                  => MergeStrategy.discard
+      case foo if foo.contains("org/fusesource")                     => MergeStrategy.first
+      case foo if foo.contains("META-INF/native/")                   => MergeStrategy.first
+      case foo if foo.contains("scala/annotation")                   => MergeStrategy.last
+      case foo if foo.contains("META-INF/sisu/javax.inject.Named")   => MergeStrategy.discard
+      case other                                                     => (assembly / assemblyMergeStrategy).value(other)
+    },
   )
 
 lazy val `import-scalajs-definitions` = project

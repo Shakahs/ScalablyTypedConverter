@@ -33,6 +33,36 @@ object AugmentModules {
     codePath.forceHasPath
   }
 
+  /** An augmentation of a module from another library cannot be merged into it: that library is converted, and often
+    * already compiled, on its own. Declaration merging means the augmenting interface *is* the one it augments, so it
+    * inherits from it instead, and a value of the augmented type stays usable where the original type is expected.
+    */
+  def inheritFromAugmented(rootScope: TsTreeScope, aux: TsAugmentedModule): TsAugmentedModule =
+    rootScope.moduleScopes.get(aux.name) match {
+      case None => aux
+      case Some(augmentedScope) =>
+        val newMembers = aux.members.map {
+          case i: TsDeclInterface if i.inheritance.isEmpty && i.tparams.isEmpty =>
+            /* The augmented module often only re-exports the interface (`export * from`), and `DeriveCopy`
+             * represents a re-exported interface as an alias of the original, so the alias' target is the
+             * parent in that case. */
+            val augmented: Option[TsTypeRef] =
+              augmentedScope
+                .lookupBase(Picker.Types, TsQIdent.of(i.name), skipValidation = true)
+                .collectFirst {
+                  case (base: TsDeclInterface, _) if base.tparams.isEmpty && base.codePath =/= i.codePath =>
+                    TsTypeRef(NoComments, base.codePath.forceHasPath.codePath, Empty)
+                  case (TsDeclTypeAlias(_, _, _, Empty, target: TsTypeRef, cp), _) if cp =/= i.codePath =>
+                    target
+                }
+
+            augmented.fold[TsContainerOrDecl](i)(parent => i.copy(inheritance = IArray(parent)))
+          case other => other
+        }
+
+        aux.copy(members = newMembers)
+    }
+
   def apply(rootScope: TsTreeScope)(file: TsParsedFile): TsParsedFile = {
 
     val targetToAux: Map[Option[CodePath.HasPath], IArray[TsAugmentedModule]] =
@@ -78,6 +108,12 @@ object AugmentModules {
         x.copy(members = newMembers)
       }
     }
-    (Merge >> Remove).visitTsParsedFile(())(file)
+    /* Whatever is left augments a module this library does not declare, so it augments another library */
+    object InheritAugmented extends TreeTransformationUnit {
+      override def leaveTsAugmentedModule(t: Unit)(x: TsAugmentedModule): TsAugmentedModule =
+        if (file.modules.contains(x.name)) x else inheritFromAugmented(rootScope, x)
+    }
+
+    InheritAugmented.visitTsParsedFile(())((Merge >> Remove).visitTsParsedFile(())(file))
   }
 }

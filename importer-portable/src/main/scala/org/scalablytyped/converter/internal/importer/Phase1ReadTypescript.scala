@@ -38,6 +38,23 @@ class Phase1ReadTypescript(
   def ignoreModule(modName: TsIdentModule): Boolean =
     (1 to modName.fragments.length).exists(n => ignoredModulePrefixes(modName.fragments.take(n)))
 
+  /** The files within the same library which `file` imports from or re-exports */
+  def referencedLocalFiles(file: InFile): IArray[InFile] =
+    parser(file) match {
+      case Left(_) => Empty
+      case Right(parsed) =>
+        val specs: IArray[TsIdentModule] =
+          parsed.imports.collect {
+            case TsImport(_, _, TsImportee.From(from))     => from
+            case TsImport(_, _, TsImportee.Required(from)) => from
+          } ++ parsed.exports.collect {
+            case TsExport(_, _, _, TsExportee.Names(_, Some(from))) => from
+            case TsExport(_, _, _, TsExportee.Star(_, from))        => from
+          }
+
+        specs.mapNotNone(spec => LibraryResolver.file(file.folder, spec.value))
+    }
+
   override def apply(
       source:     LibTsSource,
       _1:         LibTsSource,
@@ -58,7 +75,12 @@ class Phase1ReadTypescript(
             case f: LibTsSource.FromFolder =>
               /* There are often whole trees parallel to what is specified in `typings` (or similar). This ignores them */
               val bound = f.shortenedFiles.headOption.map(_.folder).getOrElse(f.folder)
-              PathsFromTsLibSource.filesFrom(bound)
+              /* ... except when the declared entry only re-exports a tree beside it, like `@stripe/stripe-js` whose
+               * `lib/index.d.ts` is nothing but `export * from '../dist'`. That tree is the library, not a parallel
+               * copy of it, so the whole package is included instead of an entry which declares nothing. */
+              if (f.shortenedFiles.forall(file => referencedLocalFiles(file).forall(_.path.startsWith(bound.path))))
+                PathsFromTsLibSource.filesFrom(bound)
+              else PathsFromTsLibSource.filesFrom(f.folder)
           }
 
         val includedViaDirective = mutable.Set.empty[InFile]
