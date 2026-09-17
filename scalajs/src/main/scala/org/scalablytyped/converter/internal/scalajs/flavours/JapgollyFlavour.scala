@@ -3,7 +3,7 @@ package scalajs
 package flavours
 
 import org.scalablytyped.converter.Selection
-import org.scalablytyped.converter.internal.scalajs.transforms.{Adapter, CleanIllegalNames}
+import org.scalablytyped.converter.internal.scalajs.transforms.Adapter
 
 case class JapgollyFlavour(
     outputPkg:              Name,
@@ -14,13 +14,16 @@ case class JapgollyFlavour(
   override val rewrites      = JapgollyTypeConversions(reactNames, scalaJsDomNames, scalaJsLibNames)
   override val dependencies  = Set(versions.runtime, versions.scalajsReact)
   val memberToPro            = new JapgollyMemberToProp(reactNamesProxy, rewrites)
-  val findProps              = new FindProps(new CleanIllegalNames(outputPkg), memberToPro, parentsResolver)
   val genStBuildingComponent = new JapgollyGenStBuildingComponent(outputPkg, versions.scala)
-  val genComponents =
-    new JapgollyGenComponents(findProps, genStBuildingComponent, reactNamesProxy, enableLongApplyMethod)
-  val genCompanions = new GenCompanions(findProps, enableLongApplyMethod) >> GenPromiseOps
 
   final override def rewrittenTree(scope: TreeScope, tree: PackageTree): PackageTree = {
+    val parentsResolver    = new ParentsResolver
+    val identifyComponents = this.identifyComponents(parentsResolver)
+    val findProps          = this.findProps(memberToPro, parentsResolver)
+    val genComponents =
+      new JapgollyGenComponents(findProps, genStBuildingComponent, reactNamesProxy, enableLongApplyMethod)
+    val genCompanions = new GenCompanions(findProps, enableLongApplyMethod) >> GenPromiseOps
+
     val withCompanions = genCompanions.visitPackageTree(scope)(tree)
 
     val withComponents: PackageTree =

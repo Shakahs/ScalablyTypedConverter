@@ -109,7 +109,6 @@ object Ci {
                 expandTypeMappings   = EnabledTypeMappingExpansion.DefaultSelection,
                 versions = Versions(
                   if (flags contains "-scala213") Versions.Scala213
-                  else if (flags contains "-scala212") Versions.Scala212
                   else Versions.Scala3,
                   Versions.ScalaJs1,
                 ),
@@ -309,9 +308,7 @@ class Ci(config: Ci.Config, paths: Ci.Paths, pool: ForkJoinPool, ec: ExecutionCo
 
     val results: Map[LibTsSource, PhaseRes[LibTsSource, PublishedSbtProject]] =
       Interface(config.debugMode) { listener =>
-        initial
-          .map(source => source -> PhaseRunner(Pipeline, logRegistry.get, listener)(source))
-          .toMap
+        PhaseRunner.all(Pipeline, logRegistry.get, listener, config.parallelLibraries)(initial).toMap
       }
 
     if (config.benchmark) {

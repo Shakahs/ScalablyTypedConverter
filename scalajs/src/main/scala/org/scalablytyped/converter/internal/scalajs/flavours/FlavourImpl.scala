@@ -3,6 +3,7 @@ package scalajs
 package flavours
 
 import org.scalablytyped.converter.Selection
+import org.scalablytyped.converter.internal.scalajs.transforms.CleanIllegalNames
 
 trait FlavourImpl {
   def rewrittenTree(s: TreeScope, tree: PackageTree): PackageTree
@@ -16,13 +17,18 @@ trait FlavourImpl {
 trait FlavourImplReact extends FlavourImpl {
   val enableReactTreeShaking: Selection[Name]
 
-  lazy val parentsResolver    = new ParentsResolver
-  lazy val stdNames           = new QualifiedName.StdNames(outputPkg)
-  lazy val scalaJsLibNames    = new ScalaJsLibNames(stdNames)
-  lazy val scalaJsDomNames    = new ScalaJsDomNames(stdNames)
-  lazy val reactNames         = new ReactNames(outputPkg)
-  lazy val reactNamesProxy    = new ReactNamesProxy(reactNames, rewrites)
-  lazy val identifyComponents = new IdentifyReactComponents(reactNamesProxy, parentsResolver, enableReactTreeShaking)
+  lazy val stdNames        = new QualifiedName.StdNames(outputPkg)
+  lazy val scalaJsLibNames = new ScalaJsLibNames(stdNames)
+  lazy val scalaJsDomNames = new ScalaJsDomNames(stdNames)
+  lazy val reactNames      = new ReactNames(outputPkg)
+  lazy val reactNamesProxy = new ReactNamesProxy(reactNames, rewrites)
+
+  /* `ParentsResolver` caches results without regard to scope, so each library needs its own */
+  def identifyComponents(parentsResolver: ParentsResolver): IdentifyReactComponents =
+    new IdentifyReactComponents(reactNamesProxy, parentsResolver, enableReactTreeShaking)
+
+  def findProps(memberToProp: MemberToProp, parentsResolver: ParentsResolver): FindProps =
+    new FindProps(new CleanIllegalNames(outputPkg), memberToProp, parentsResolver)
 
   def involvesReact(scope: TreeScope): Boolean = {
     val react = Name("react")

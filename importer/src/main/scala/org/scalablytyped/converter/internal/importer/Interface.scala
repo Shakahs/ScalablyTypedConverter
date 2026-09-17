@@ -27,15 +27,16 @@ object Interface {
     private val status = mutable.Map.empty[TsIdentLibrary, Event[LibTsSource]]
     private var failed = List.empty[(TsIdentLibrary, Failure[LibTsSource])]
 
-    private def ignored   = status.collect { case (lib, _: Ignored[LibTsSource]) => lib }
-    private def active    = status.collect { case (lib, x: Started[LibTsSource]) => (lib, x) }
-    private def blocked   = status.collect { case (lib, x: Blocked[LibTsSource]) => (lib, x) }
-    private def succeeded = status.collect { case (lib, x: Success[LibTsSource]) => lib -> x }
     private val hasExited = new AtomicBoolean(false)
 
+    /* `status` and `failed` are written by the phases, so read them under the same lock */
+    private def snapshot(): (Map[TsIdentLibrary, Event[LibTsSource]], List[(TsIdentLibrary, Failure[LibTsSource])]) =
+      synchronized((status.toMap, failed))
+
     def finish(): Unit = {
-      require(blocked.isEmpty)
-      require(active.isEmpty)
+      val (status, _) = snapshot()
+      require(!status.values.exists { case _: Blocked[LibTsSource] => true; case _ => false })
+      require(!status.values.exists { case _: Started[LibTsSource] => true; case _ => false })
       hasExited.set(true)
     }
 
@@ -60,6 +61,12 @@ object Interface {
       }
 
     def render(): Unit = {
+      val (status, failed) = snapshot()
+      val ignored          = status.collect { case (lib, _: Ignored[LibTsSource]) => lib }
+      val active           = status.collect { case (lib, x: Started[LibTsSource]) => (lib, x) }
+      val blocked          = status.collect { case (lib, x: Blocked[LibTsSource]) => (lib, x) }
+      val succeeded        = status.collect { case (lib, x: Success[LibTsSource]) => lib -> x }
+
       val sb = new StringBuffer()
       def println(s: String) = sb.append(s).append("\n")
 

@@ -3,7 +3,7 @@ package scalajs
 package flavours
 
 import org.scalablytyped.converter.Selection
-import org.scalablytyped.converter.internal.scalajs.transforms.{Adapter, CleanIllegalNames}
+import org.scalablytyped.converter.internal.scalajs.transforms.Adapter
 
 case class SlinkyNativeFlavour(
     outputPkg:              Name,
@@ -19,12 +19,16 @@ case class SlinkyNativeFlavour(
     SlinkyTypeConversions(scalaJsDomNames, scalaJsLibNames, reactNames, isWeb = false)
 
   val memberToProp           = new MemberToProp.Default(rewrites)
-  val findProps              = new FindProps(new CleanIllegalNames(outputPkg), memberToProp, parentsResolver)
   val genStBuildingComponent = new SlinkyGenStBuildingComponent(outputPkg, versions.scala)
-  val gen                    = new SlinkyGenComponents(SlinkyGenComponents.Native(()), findProps, genStBuildingComponent, reactNamesProxy)
-  val genCompanions          = new GenCompanions(findProps, enableLongApplyMethod) >> GenPromiseOps
 
   final override def rewrittenTree(scope: TreeScope, tree: PackageTree): PackageTree = {
+    val parentsResolver    = new ParentsResolver
+    val identifyComponents = this.identifyComponents(parentsResolver)
+    val findProps          = this.findProps(memberToProp, parentsResolver)
+    val gen =
+      new SlinkyGenComponents(SlinkyGenComponents.Native(()), findProps, genStBuildingComponent, reactNamesProxy)
+    val genCompanions = new GenCompanions(findProps, enableLongApplyMethod) >> GenPromiseOps
+
     val withCompanions = genCompanions.visitPackageTree(scope)(tree)
 
     val withComponents = if (involvesReact(scope)) {

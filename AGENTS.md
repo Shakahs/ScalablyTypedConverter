@@ -15,7 +15,7 @@ Minimize tokens in responses:
 
 **ScalablyTyped Converter** converts TypeScript definition files (`.d.ts`) into Scala.js facades, enabling use of JS libraries in Scala.js projects.
 
-- **Stack:** Scala 2.12 + 3.3, SBT, scalafmt, parser-combinators, Circe, Coursier, os-lib
+- **Stack:** Scala 3 (JDK 21+), SBT, scalafmt, parser-combinators, Circe, Coursier, os-lib, Ox
 - **Docs:** [README.md](README.md), [CLAUDE.md](CLAUDE.md)
 
 ---
@@ -24,7 +24,6 @@ Minimize tokens in responses:
 
 ```
 logging ← core ← ts/scalajs ← phases ← importer-portable ← importer/cli
-                                                           ← sbt-converter (Scala 2.12 only)
 ```
 
 ### Module Responsibilities
@@ -35,11 +34,10 @@ logging ← core ← ts/scalajs ← phases ← importer-portable ← importer/cl
 | `core` | TypeScript AST (`TsTree`), Scala.js AST (`Tree`), shared utilities (`IArray`, `Name`) |
 | `ts` | TypeScript lexer + parser (parser-combinators), TS-level transforms |
 | `scalajs` | Scala.js AST transforms, flavour implementations (Normal/Slinky/Japgolly) |
-| `phases` | `PhaseRes` monad, `PhaseRunner`, phase caching |
+| `phases` | `PhaseRes` monad, `PhaseRunner` (parallel via Ox), thread-safe phase caching |
 | `importer-portable` | Conversion pipeline: Phase1 → Phase2 → PhaseFlavour → Phase3 |
 | `importer` | JVM runner (`Main`), snapshot tests, Coursier-based compiler |
 | `cli` | CLI entry point with scopt argument parsing |
-| `sbt-converter` | SBT plugin wrapping `importer-portable`; Scala 2.12 only |
 
 ### Conversion Pipeline
 
@@ -89,7 +87,7 @@ Applied in Phase2: `CombineOverloads`, `CompleteClass`, `FakeLiterals`, `UnionTo
 2. Use `PhaseRes` for phase results — never throw exceptions across phase boundaries
 3. `IArray` is not a standard Scala collection — use its own API
 4. Changing a transform in `ts/` or `scalajs/` may require snapshot test updates
-5. `sbt-converter` depends only on `importer-portable`, not on JVM-specific `importer`
+5. Phases run concurrently for different libraries (`PhaseRunner.all`); state shared across libraries must be thread-safe
 6. All new dependencies go into `project/Deps.scala`
 7. Run `sbt scalafmtAll` before finishing
 
@@ -102,17 +100,16 @@ Applied in Phase2: `CombineOverloads`, `CompleteClass`, `FakeLiterals`, `UnionTo
 - **Snapshot test:** add a test `.d.ts` under `importer/src/test/resources/`, add test case in `ImporterTest.scala`
 
 ### Common Mistakes
-- `sbt-converter`: only `importer-portable` deps; never add JVM-specific (`importer`) deps
 - `IArray`: has no standard `Iterable` methods — use `IArray.fromTraversable`, `.toVector`, or IArray-specific API
 - Phase results: always `.map`/`.flatMap` on `PhaseRes`; don't unwrap with `.get` or throw
 - Snapshot tests update automatically when run locally (not in CI); intentional changes — just run tests locally
-- Cross-version: `sbt-converter` is Scala 2.12 only; use `CrossVersion.for3Use2_13` for libs shared between Scala 2/3
+- Scala 2.13 is still a code-generation target (`Versions.Scala213`, `ImporterTest213`); the converter itself is Scala 3 only. Use `CrossVersion.for3Use2_13` for libs without `_3` artifacts
 
 ### When to Plan
 - New encoding strategy affecting multiple transforms or phases
 - New flavour or significant flavour change
 - Modifying the phase pipeline order
-- Changes that affect the `sbt-converter` API surface (used by end users)
+- Changes that affect the `cli` flags or published artifact names (used by downstream builds)
 
 **Don't plan:** single-file bugfixes, adding a snapshot test, formatting, logging
 

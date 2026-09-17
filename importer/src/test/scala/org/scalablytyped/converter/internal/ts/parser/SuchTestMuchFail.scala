@@ -5,7 +5,7 @@ package parser
 import com.olvind.logging
 import org.scalablytyped.converter.internal.constants.defaultCacheFolder
 import org.scalablytyped.converter.internal.importer.{Ci, Cmd, DTUpToDate, PersistingParser}
-import org.scalablytyped.converter.internal.ParallelCompat._
+import ox.mapPar
 
 object SuchTestMuchFail extends App {
   val logger = logging.stdout
@@ -28,17 +28,17 @@ object SuchTestMuchFail extends App {
     banner()
   }
 
-  val allFiles: Seq[os.Path] =
+  val allFiles: Vector[os.Path] =
     os.walk
       .stream(dtFolder.path, _.last == ".git")
       .filter(os.isFile)
       .filter(_.toString.endsWith(".d.ts"))
-      .toSeq
+      .toVector
 
   val parser = PersistingParser(None, IArray(dtFolder), logger.void)
 
   val parsed: Seq[(os.Path, Either[String, TsParsedFile])] =
-    allFiles.parMap { (path: os.Path) =>
+    allFiles.mapPar(Runtime.getRuntime.availableProcessors) { (path: os.Path) =>
       val t0 = System.currentTimeMillis
       val res =
         try parser(InFile(path))

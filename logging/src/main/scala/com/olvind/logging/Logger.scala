@@ -2,6 +2,8 @@ package com.olvind.logging
 
 import java.io.Writer
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.ReentrantLock
 
 import fansi.Str
 import sourcecode.{Enclosing, File, Line, Text}
@@ -21,13 +23,15 @@ object Logger {
   case class Stored(message: Str, throwable: Option[Throwable], metadata: Metadata, ctx: Ctx)
 
   private[logging] class Store() {
-    private var reversed: List[Stored] = Nil
+    private val reversed = new AtomicReference[List[Stored]](Nil)
 
-    def store(s: Stored): Unit =
-      reversed = s :: reversed
+    def store(s: Stored): Unit = {
+      reversed.updateAndGet(s :: _)
+      ()
+    }
 
     def normal: Array[Stored] =
-      reversed.toArray.reverse
+      reversed.get.toArray.reverse
   }
 
   private[logging] final class StoringLogger(store: Store, val ctx: Ctx) extends Logger[Array[Stored]] {
@@ -102,14 +106,18 @@ object Logger {
       new Mapped(wrapped.withContext(key, value), f)
   }
 
-  private[logging] final class Synchronized[U](wrapped: Logger[U]) extends Logger[U] {
+  /* all loggers derived through `withContext` share `lock` */
+  private[logging] final class Synchronized[U](wrapped: Logger[U], lock: ReentrantLock) extends Logger[U] {
     override def underlying: U = wrapped.underlying
 
-    override def log[T: Formatter](t: => Text[T], throwable: Option[Throwable], m: Metadata): Unit =
-      this.synchronized(wrapped.log(t, throwable, m))
+    override def log[T: Formatter](t: => Text[T], throwable: Option[Throwable], m: Metadata): Unit = {
+      lock.lock()
+      try wrapped.log(t, throwable, m)
+      finally lock.unlock()
+    }
 
     override def withContext[T: Formatter](key: String, value: T): Synchronized[U] =
-      new Synchronized(wrapped.withContext(key, value))
+      new Synchronized(wrapped.withContext(key, value), lock)
   }
 
   object DevNull extends Logger[Unit] {
@@ -129,7 +137,7 @@ object Logger {
       new Mapped[U, Unit](self, _ => ())
 
     def syncAccess: Logger[U] =
-      new Synchronized(self)
+      new Synchronized(self, new ReentrantLock())
   }
 
   case class LoggedException(message: Str) extends Throwable(message.plainText)

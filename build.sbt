@@ -1,11 +1,9 @@
-import sbt.Def.spaceDelimited
-import sbt.Reference.display
-
-import scala.collection.Seq
 import scala.sys.process.stringToProcess
 
 lazy val latestTag =
   "git tag -l --sort=committerdate".!!.linesIterator.toVector.lastOption.fold("no-version")(_.drop( /* 'v' */ 1))
+
+ThisBuild / scalaVersion := Versions.scala3
 
 ThisBuild / libraryDependencySchemes ++= Seq(
   "org.scala-lang.modules" %% "scala-xml" % VersionScheme.Always,
@@ -13,63 +11,8 @@ ThisBuild / libraryDependencySchemes ++= Seq(
   "org.scala-lang.modules" %% "scala-collection-compat" % VersionScheme.Always,
 )
 
-lazy val scala212 = Versions.scala212
-lazy val scala3   = Versions.scala3
-
-val scala2Versions:     Seq[String] = Seq(scala212)
-val scala2And3Versions: Seq[String] = scala2Versions ++ Seq(scala3)
-
-lazy val rawAllAggregates =
-  logging.projectRefs ++
-    core.projectRefs ++
-    phases.projectRefs ++
-    ts.projectRefs ++
-    scalajs.projectRefs ++
-    `importer-portable`.projectRefs ++
-    `sbt-converter`.projectRefs ++
-    importer.projectRefs ++
-    cli.projectRefs
-
-lazy val allAggregates = rawAllAggregates
-
-val scopesDescription = "Scala version can be: 2.12, 3; platform: JVM"
-
-val cleanScoped = inputKey[Unit](
-  s"Run clean in the given scope. Usage: cleanScoped [scala version] [platform]. $scopesDescription",
-)
-
-val compileScoped = inputKey[Unit](
-  s"Compiles sources in the given scope. Usage: compileScoped [scala version] [platform]. $scopesDescription",
-)
-
-val testScoped = inputKey[Unit](
-  s"Run tests in the given scope. Usage: testScoped [scala version] [platform]. $scopesDescription",
-)
-
-val scalafmtCheckScoped = inputKey[Unit](
-  s"Check sources by scalafmt in the given scope. Usage: scalafmtCheckScoped [scala version] [platform]. $scopesDescription",
-)
-
-def filterProject(p: String => Boolean) =
-  ScopeFilter(inProjects(allAggregates.filter(pr => p(display(pr.project))) *))
-
-def filterByVersionAndPlatform(scalaVersionFilter: String, platformFilter: String) =
-  filterProject { projectName =>
-    val byPlatform =
-      if (platformFilter == "JVM") !projectName.contains("JS")
-      else projectName.contains(platformFilter)
-    val byVersion = scalaVersionFilter match {
-      case "2.13" => !projectName.contains("2_12") && !projectName.contains("3")
-      case "2.12" => projectName.contains("2_12")
-      case "3"    => projectName.contains("3")
-    }
-
-    byPlatform && byVersion
-  }
-
-lazy val core = projectMatrix
+lazy val core = project
   .in(file("core"))
-  .jvmPlatform(scala2And3Versions)
   .configure(baseSettings)
   .settings(
     libraryDependencies ++= Seq(
@@ -79,16 +22,14 @@ lazy val core = projectMatrix
     ) ++ Deps.circe.map(_.exclude("org.scala-lang.modules", "scala-collection-compat_3")),
   )
 
-lazy val logging = projectMatrix
+lazy val logging = project
   .in(file("logging"))
-  .jvmPlatform(scala2And3Versions)
   .configure(baseSettings)
   .settings(libraryDependencies ++= Seq(Deps.sourcecode, Deps.fansi))
 
-lazy val ts = projectMatrix
+lazy val ts = project
   .in(file("ts"))
-  .jvmPlatform(scala2And3Versions)
-  .configure(baseSettings, optimize)
+  .configure(baseSettings)
   .dependsOn(core, logging)
   .settings(libraryDependencies += Deps.parserCombinators)
 
@@ -101,33 +42,30 @@ lazy val docs = project
   )
   .enablePlugins(MdocPlugin, DocusaurusPlugin)
 
-lazy val scalajs = projectMatrix
+lazy val scalajs = project
   .in(file("scalajs"))
-  .jvmPlatform(scala2And3Versions)
   .dependsOn(core, logging)
-  .configure(baseSettings, optimize)
+  .configure(baseSettings)
   .settings(libraryDependencies ++= Seq(Deps.scalaXml))
   .enablePlugins(BuildInfoPlugin)
   .settings(
     buildInfoPackage := "org.scalablytyped.converter.internal.scalajs",
     buildInfoKeys := Seq[BuildInfoKey](
-      "scala212" -> Versions.scala212,
       "scala213" -> Versions.scala213,
-      "scala3"   -> Versions.scala3,
-      "scalaJs"  -> Versions.scalaJs,
+      "scala3" -> Versions.scala3,
+      "scalaJs" -> Versions.scalaJs,
     ),
   )
 
-lazy val phases = projectMatrix
+lazy val phases = project
   .in(file("phases"))
-  .jvmPlatform(scala2And3Versions)
   .dependsOn(core, logging)
-  .configure(baseSettings, optimize)
+  .configure(baseSettings)
+  .settings(libraryDependencies ++= Seq(Deps.ox, Deps.scalatest % Test))
 
-lazy val `importer-portable` = projectMatrix
+lazy val `importer-portable` = project
   .in(file("importer-portable"))
-  .jvmPlatform(scala2And3Versions)
-  .configure(baseSettings, optimize)
+  .configure(baseSettings)
   .dependsOn(ts, scalajs, phases)
   .enablePlugins(BuildInfoPlugin)
   .settings(
@@ -138,24 +76,16 @@ lazy val `importer-portable` = projectMatrix
     ),
   )
 
-lazy val importer = projectMatrix
+lazy val importer = project
   .in(file("importer"))
-  .jvmPlatform(scala2And3Versions)
   .dependsOn(`importer-portable`)
-  .configure(baseSettings, optimize)
+  .configure(baseSettings)
   .settings(
-    libraryDependencies ++= {
-      val base = Seq(
-        Deps.coursier.cross(CrossVersion.for3Use2_13).exclude("org.scala-lang.modules", "scala-xml_2.13"),
-        Deps.scalaXml,
-        Deps.scalatest % Test,
-      )
-      // Parallel collections are built-in for Scala 2.12, need external library for 2.13+
-      CrossVersion.partialVersion(scalaVersion.value) match {
-        case Some((2, 12)) => base
-        case _             => base :+ (Deps.parallelCollections % Test)
-      }
-    },
+    libraryDependencies ++= Seq(
+      Deps.coursier.cross(CrossVersion.for3Use2_13).exclude("org.scala-lang.modules", "scala-xml_2.13"),
+      Deps.scalaXml,
+      Deps.scalatest % Test,
+    ),
     Test / fork := true,
     assembly / test := {},
     assembly / mainClass := Some("org.scalablytyped.converter.Main"),
@@ -174,54 +104,23 @@ lazy val importer = projectMatrix
     Test / testOptions += Tests.Argument("-P4"),
   )
 
-lazy val cli = projectMatrix
+lazy val cli = project
   .in(file("cli"))
-  .jvmPlatform(scala2And3Versions)
   .dependsOn(importer)
   .configure(baseSettings)
   .settings(
     libraryDependencies += Deps.scopt,
   )
 
-lazy val `sbt-converter` = projectMatrix
-  .in(file("sbt-converter"))
-  .jvmPlatform(scala2Versions)
-  .dependsOn(`importer-portable` % "compile->compile;test->test")
-  .enablePlugins(ScriptedPlugin)
-  .configure(baseSettings)
-  .settings(
-    name := "sbt-converter",
-    sbtPlugin := true,
-    addSbtPlugin("ch.epfl.scala" % "sbt-scalajs-bundler" % "0.21.1"),
-    addSbtPlugin("org.scala-js" % "sbt-scalajs" % Versions.scalaJs),
-    scriptedBufferLog := false,
-    scriptedLaunchOpts ++= Seq("-Xmx2048M", "-Dplugin.version=" + version.value),
-    watchSources ++= {
-      (sourceDirectory.value ** "*").get
-    },
-    libraryDependencies ++= Seq(Deps.awssdkS3),
-  )
-
-lazy val `import-scalajs-definitions` = projectMatrix
+lazy val `import-scalajs-definitions` = project
   .in(file("import-scalajs-definitions"))
-  .jvmPlatform(scala2And3Versions)
   .configure(baseSettings)
   .dependsOn(importer)
   .settings(
-    libraryDependencies ++= {
-      CrossVersion.partialVersion(scalaVersion.value) match {
-        case Some((2, 12)) =>
-          List(
-            "org.scala-lang" % "scalap" % scala212,
-            Deps.coursier,
-          )
-        case _ => // Scala 3
-          List(
-            "org.scala-lang" % "scalap" % Versions.scala213,
-            Deps.coursier.cross(CrossVersion.for3Use2_13).exclude("org.scala-lang.modules", "scala-xml_2.13"),
-          )
-      }
-    },
+    libraryDependencies ++= Seq(
+      "org.scala-lang" % "scalap" % Versions.scala213,
+      Deps.coursier.cross(CrossVersion.for3Use2_13).exclude("org.scala-lang.modules", "scala-xml_2.13"),
+    ),
     publish / skip := true,
   )
 
@@ -231,29 +130,7 @@ lazy val root = project
     name := "converter-root",
     publish / skip := true,
   )
-  .settings(
-    cleanScoped :=
-      Def.inputTaskDyn {
-        val args = spaceDelimited("<arg>").parsed
-        Def.taskDyn(clean.all(filterByVersionAndPlatform(args.head, args(1))))
-      }.evaluated,
-    compileScoped :=
-      Def.inputTaskDyn {
-        val args = spaceDelimited("<arg>").parsed
-        Def.taskDyn((Compile / compile).all(filterByVersionAndPlatform(args.head, args(1))))
-      }.evaluated,
-    testScoped :=
-      Def.inputTaskDyn {
-        val args = spaceDelimited("<arg>").parsed
-        Def.taskDyn((Test / test).all(filterByVersionAndPlatform(args.head, args(1))))
-      }.evaluated,
-    scalafmtCheckScoped :=
-      Def.inputTaskDyn {
-        val args = spaceDelimited("<arg>").parsed
-        Def.taskDyn((Compile / scalafmtCheck).all(filterByVersionAndPlatform(args.head, args(1))))
-      }.evaluated,
-  )
-  .aggregate(allAggregates *)
+  .aggregate(logging, core, phases, ts, scalajs, `importer-portable`, importer, cli)
 
 lazy val baseSettings: Project => Project =
   _.settings(
@@ -269,36 +146,9 @@ lazy val baseSettings: Project => Project =
       ),
     ),
     scalacOptions ~= (_.filterNot(Set("-Ywarn-unused:imports", "-Ywarn-unused:params", "-Xfatal-warnings"))),
-    scalacOptions ++= {
-      CrossVersion.partialVersion(scalaVersion.value) match {
-        case Some((3, _)) =>
-          Seq("-no-indent", "-source:3.3")
-        case _ =>
-          Seq()
-      }
-    },
+    scalacOptions ++= Seq("-no-indent", "-source:3.3"),
+    /* scalatest assertions return `Assertion`, which is discarded in the middle of a test */
+    Test / scalacOptions -= "-Wnonunit-statement",
     /* disable scaladoc */
     Compile / doc / sources := Nil,
-  )
-
-lazy val optimize: Project => Project =
-  _.settings(
-    scalacOptions ++= {
-      CrossVersion.partialVersion(scalaVersion.value) match {
-        case Some((2, _)) if insideCI.value || !isSnapshot.value =>
-          Seq(
-            "-opt:l:inline",
-            "-opt:l:method",
-            "-opt:simplify-jumps",
-            "-opt:compact-locals",
-            "-opt:copy-propagation",
-            "-opt:redundant-casts",
-            "-opt:box-unbox",
-            "-opt:nullness-tracking",
-            "-opt-inline-from:org.scalablytyped.converter.internal.**",
-            "-opt-warnings",
-          )
-        case _ => Nil
-      }
-    },
   )

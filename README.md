@@ -19,30 +19,20 @@
     <img src="https://img.shields.io/badge/scala.js-1.0.0+-red.svg?logo=scala&logoColor=red"/>
   </a>
   <a href="https://central.sonatype.com/search?namespace=io.kinoplan.scalablytyped">
-    <img src="https://img.shields.io/maven-central/v/io.kinoplan.scalablytyped/sbt-converter_2.12_1.0.svg?label=Maven%20Central"/>
+    <img src="https://img.shields.io/maven-central/v/io.kinoplan.scalablytyped/cli_3.svg?label=Maven%20Central"/>
   </a>
 </p>
 
 ## Quick Start
 
-**project/plugins.sbt**
-```scala
-resolvers += "Maven Central Sonatype Snapshots".at("https://central.sonatype.com/repository/maven-snapshots")
+The converter is a command line tool (Scala 3, JDK 21+). The sbt plugin has been removed.
 
-addSbtPlugin("org.scala-js"              % "sbt-scalajs"   % "1.21.0")
-addSbtPlugin("io.kinoplan.scalablytyped" % "sbt-converter" % "<version>")
+```sh
+sbt "cli/run --directory <dir with package.json and node_modules> --flavour scalajs-react"
 ```
 
-**build.sbt**
-```scala
-project
-  .enablePlugins(ScalaJSPlugin, ScalablyTypedConverterExternalNpmPlugin)
-  .settings(
-    scalaVersion := "2.13.18",
-    stFlavour    := Flavour.ScalajsReact, // or Slinky/SlinkyNative
-    stIgnore     ++= List("typescript"),
-    externalNpm  := baseDirectory.value,
-  )
-```
+Or publish it (`sbt publishM2`) and run `org.scalablytyped.converter.cli.Main` from
+`io.kinoplan.scalablytyped:cli_3`. Run with `--help` to list the options.
+`--parallelism <n>` sets how many libraries are converted at the same time; `1` converts them one by one.
 
-`externalNpm` points to the directory containing `package.json`. Run `yarn install` there before the sbt build.
+Generated facades target Scala 3 by default; pass `--scala 2.13.x` to generate Scala 2.13 code.

@@ -32,14 +32,6 @@ object Versions {
       case Version("2", minor, _) => s"2.$minor"
       case other                  => other
     }
-
-    val compilerBridge: Option[Dep.Java] =
-      scalaVersion match {
-        case Version("3", _, _) => Some(Dep.Java(scalaOrganization, "scala3-sbt-bridge", scalaVersion))
-        case Version("2", "13", n) if n.toInt >= 12 =>
-          Some(Dep.Java(scalaOrganization, "scala2-sbt-bridge", scalaVersion))
-        case _ => None
-      }
   }
 
   object Scala {
@@ -47,7 +39,6 @@ object Versions {
     implicit val decodes: Decoder[Scala] = Decoder[String].map(Scala.apply)
   }
 
-  val Scala212 = Scala(BuildInfo.scala212)
   val Scala213 = Scala(BuildInfo.scala213)
   val Scala3   = Scala(BuildInfo.scala3)
 

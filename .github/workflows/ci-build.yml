@@ -7,8 +7,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        scala: ["2.12", "3"]
-        platform: ["JVM"]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Enable long paths (Windows)
@@ -31,18 +29,18 @@ jobs:
       - uses: sbt/setup-sbt@v1
 
       - name: Clean
-        run: sbt $SBT_JAVA_OPTS -v "cleanScoped ${{ matrix.scala }} ${{ matrix.platform }}"
+        run: sbt $SBT_JAVA_OPTS -v clean
 
       - name: Compile
-        run: sbt $SBT_JAVA_OPTS -v "compileScoped ${{ matrix.scala }} ${{ matrix.platform }}"
+        run: sbt $SBT_JAVA_OPTS -v compile
 
       - name: Test
-        run: sbt $SBT_JAVA_OPTS -v "testScoped ${{ matrix.scala }} ${{ matrix.platform }}"
+        run: sbt $SBT_JAVA_OPTS -v test
 
       - name: Scalafmt check sbt
-        if: matrix.os == 'ubuntu-latest' && matrix.scala == '2.12' && matrix.platform == 'JVM'
+        if: matrix.os == 'ubuntu-latest'
         run: sbt $SBT_JAVA_OPTS -v scalafmtSbtCheck
 
       - name: Scalafmt check sources
         if: matrix.os == 'ubuntu-latest'
-        run: sbt $SBT_JAVA_OPTS -v "scalafmtCheckScoped ${{ matrix.scala }} ${{ matrix.platform }}"
+        run: sbt $SBT_JAVA_OPTS -v scalafmtCheckAll

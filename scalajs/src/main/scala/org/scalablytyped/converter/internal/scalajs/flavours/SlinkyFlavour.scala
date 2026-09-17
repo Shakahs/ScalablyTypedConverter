@@ -3,7 +3,9 @@ package scalajs
 package flavours
 
 import org.scalablytyped.converter.Selection
-import org.scalablytyped.converter.internal.scalajs.transforms.{Adapter, CleanIllegalNames}
+import org.scalablytyped.converter.internal.scalajs.transforms.Adapter
+
+import java.util.concurrent.atomic.AtomicReference
 
 case class SlinkyFlavour(
     outputPkg:              Name,
@@ -16,23 +18,26 @@ case class SlinkyFlavour(
   override val rewrites     = SlinkyTypeConversions(scalaJsDomNames, scalaJsLibNames, reactNames, isWeb = true)
 
   val memberToProp           = new MemberToProp.Default(rewrites)
-  val findProps              = new FindProps(new CleanIllegalNames(outputPkg), memberToProp, parentsResolver)
-  val genCompanions          = new GenCompanions(findProps, enableLongApplyMethod) >> GenPromiseOps
   val genStBuildingComponent = new SlinkyGenStBuildingComponent(outputPkg, versions.scala)
 
   /* we need the actual typescript react definitions at runtime to compute this lazily */
-  private var cached = Option.empty[SlinkyWeb]
+  private val cached = new AtomicReference[Option[SlinkyWeb]](None)
 
   final override def rewrittenTree(scope: TreeScope, tree: PackageTree): PackageTree = {
+    val parentsResolver    = new ParentsResolver
+    val identifyComponents = this.identifyComponents(parentsResolver)
+    val findProps          = this.findProps(memberToProp, parentsResolver)
+    val genCompanions      = new GenCompanions(findProps, enableLongApplyMethod) >> GenPromiseOps
+
     val slinkyWebOpt: Option[SlinkyWeb] =
-      cached match {
+      cached.get match {
         case _ if !involvesReact(scope) => None
         case existing @ Some(_)         => existing
         case None =>
-          val tags      = SlinkyTagsLoader(stdNames, reactNames, scalaJsDomNames, scope / tree, parentsResolver)
-          val slinkyWeb = Some(new SlinkyWeb(reactNames, tags))
-          cached = slinkyWeb
-          slinkyWeb
+          val tags = SlinkyTagsLoader(stdNames, reactNames, scalaJsDomNames, scope / tree, parentsResolver)
+          // if another library got here first, use its result
+          cached.compareAndSet(None, Some(new SlinkyWeb(reactNames, tags)))
+          cached.get
       }
 
     val withCompanions = genCompanions.visitPackageTree(scope)(tree)

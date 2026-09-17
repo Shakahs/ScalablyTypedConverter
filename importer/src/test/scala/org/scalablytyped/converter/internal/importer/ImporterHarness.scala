@@ -122,8 +122,10 @@ trait ImporterHarness extends AnyFunSuite {
         )
 
     val results: SortedMap[LibTsSource, PhaseRes[LibTsSource, PublishedSbtProject]] =
-      allSources
-        .map(s => (s: LibTsSource) -> PhaseRunner(phase, logRegistry.get, PhaseListener.NoListener)(s))
+      PhaseRunner
+        .all(phase, logRegistry.get, PhaseListener.NoListener[LibTsSource], parallelism = 4)(
+          allSources.toVector.map(s => s: LibTsSource),
+        )
         .toMap
         .toSorted
 

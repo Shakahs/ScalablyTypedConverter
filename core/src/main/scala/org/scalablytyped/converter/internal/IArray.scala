@@ -106,7 +106,7 @@ object IArray {
     }
   }
 
-  final class Builder[A <: AnyRef](initialCapacity: Int) extends mutable.Builder[A, IArray[A]] with BuilderCompat[A] {
+  final class Builder[A <: AnyRef](initialCapacity: Int) extends mutable.Builder[A, IArray[A]] {
     private val buf = new util.ArrayList[A](initialCapacity)
 
     def addOne(elem: A): this.type = {

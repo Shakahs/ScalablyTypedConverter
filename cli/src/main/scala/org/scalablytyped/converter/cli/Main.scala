@@ -53,6 +53,7 @@ object Main {
       inDirectory:    os.Path,
       includeDev:     Boolean,
       includeProject: Boolean,
+      parallelism:    Int,
   ) {
     lazy val paths = new Paths(inDirectory)
     def mapConversion(f: ConversionOptions => ConversionOptions) = copy(conversion = f(conversion))
@@ -64,6 +65,7 @@ object Main {
     inDirectory    = os.pwd,
     includeDev     = false,
     includeProject = false,
+    parallelism    = math.min(4, Runtime.getRuntime.availableProcessors),
   )
 
   val parseCachePath = Some(files.existing(constants.defaultCacheFolder / "parse").toNIO)
@@ -124,6 +126,10 @@ object Main {
       opt[Boolean]("includeProject")
         .action((x, c) => c.copy(includeProject = x))
         .text("Include project in current directory"),
+      opt[Int]("parallelism")
+        .validate(x => if (x >= 1) success else failure("--parallelism must be at least 1"))
+        .action((x, c) => c.copy(parallelism = x))
+        .text(s"How many libraries to convert at the same time (default ${DefaultConfig.parallelism})"),
       opt[Boolean]("useScalaJsDomTypes")
         .action((x, c) => c.mapConversion(_.copy(useScalaJsDomTypes = x)))
         .text(
@@ -199,6 +205,7 @@ object Main {
             inDir,
             includeDev,
             includeProject,
+            parallelism,
           ),
           ) =>
         val packageJsonPath = c.paths.packageJson.getOrElse(sys.error(s"$inDir does not contain package.json"))
@@ -247,6 +254,7 @@ object Main {
             "versions" -> conversion.versions.toString,
             "organization" -> conversion.organization,
             "enableLongApplyMethod" -> conversion.enableLongApplyMethod.toString,
+            "parallelism" -> parallelism.toString,
           ),
         )
 
@@ -301,8 +309,8 @@ object Main {
             )
 
         val results: Map[LibTsSource, PhaseRes[LibTsSource, PublishedSbtProject]] =
-          sources
-            .map(source => source -> PhaseRunner(Pipeline, (_: LibTsSource) => logger.void, NoListener)(source))
+          PhaseRunner
+            .all(Pipeline, (_: LibTsSource) => logger.void, NoListener[LibTsSource], parallelism)(sources)
             .toMap
 
         val td = System.currentTimeMillis - t0
