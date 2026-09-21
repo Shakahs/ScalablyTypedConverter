@@ -1,0 +1,189 @@
+# Bazel build of the vendored ScalablyTyped converter, module for module after its
+# build.sbt:
+#
+#   sbt project          -> Bazel target
+#   logging              -> :logging
+#   core                 -> :core
+#   ts                   -> :ts
+#   scalajs              -> :scalajs        (+ generated BuildInfo)
+#   phases               -> :phases
+#   importer-portable    -> :importer_portable (+ generated BuildInfo)
+#   importer             -> :importer
+#   cli                  -> :cli            (the executable //web/js's conversion runs)
+#
+# The Gradle build assembled the cli into one jar through an sbt exec, because a Gradle
+# configuration could not consume a module of the same build. Bazel has no such limit:
+# the conversion action runs :cli directly, and a change under any module here rebuilds
+# only what depends on it. Tests and the docs site are not built.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rules_scala//scala:scala.bzl", "scala_binary", "scala_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# build.sbt's baseSettings. sbt-buildinfo's BuildInfo objects are written below from
+# project/Versions.scala and the version the Gradle build stamped on the converter.
+SCALACOPTS = [
+    "-no-indent",
+    "-source:3.3",
+]
+
+scala_library(
+    name = "logging",
+    srcs = glob(["logging/src/main/scala/**/*.scala"]),
+    scalacopts = SCALACOPTS,
+    exports = [
+        "@maven//:com_lihaoyi_fansi_3",
+        "@maven//:com_lihaoyi_sourcecode_3",
+    ],
+    deps = [
+        "@maven//:com_lihaoyi_fansi_3",
+        "@maven//:com_lihaoyi_sourcecode_3",
+    ],
+)
+
+# What build.sbt gives `core`. Their own dependencies — cats under circe, geny under
+# os-lib, jackson-databind under circe-jackson, scala-collection-compat — reach the
+# compile classpath through //tools/scala:erp_toolchain's plus-one dependency mode, as
+# they did in sbt. `core` exports the set because os.Path, circe's codecs and IArray are
+# in the signatures every module downstream compiles against.
+CORE_DEPS = [
+    "@maven//:com_lihaoyi_ammonite_ops_2_13",
+    "@maven//:com_lihaoyi_os_lib_2_13",
+    "@maven//:com_lihaoyi_sourcecode_3",
+    "@maven//:io_circe_circe_core_3",
+    "@maven//:io_circe_circe_generic_3",
+    "@maven//:io_circe_circe_jackson212_3",
+    "@maven//:io_circe_circe_parser_3",
+]
+
+scala_library(
+    name = "core",
+    srcs = glob(["core/src/main/scala/**/*.scala"]),
+    scalacopts = SCALACOPTS,
+    exports = CORE_DEPS,
+    deps = CORE_DEPS,
+)
+
+scala_library(
+    name = "ts",
+    srcs = glob(["ts/src/main/scala/**/*.scala"]),
+    scalacopts = SCALACOPTS,
+    # TsLexer/TsParser extend the parser-combinator classes, so their TASTy names them.
+    exports = [
+        ":core",
+        ":logging",
+        "@maven//:org_scala_lang_modules_scala_parser_combinators_3",
+    ],
+    deps = [
+        ":core",
+        ":logging",
+        "@maven//:org_scala_lang_modules_scala_parser_combinators_3",
+    ],
+)
+
+write_file(
+    name = "scalajs_build_info",
+    out = "scalajs/generated/BuildInfo.scala",
+    content = [
+        "package org.scalablytyped.converter.internal.scalajs",
+        "",
+        "object BuildInfo {",
+        '  val scala213: String = "2.13.16"',
+        '  val scala3: String = "3.9.0"',
+        '  val scalaJs: String = "1.22.0"',
+        "}",
+        "",
+    ],
+)
+
+scala_library(
+    name = "scalajs",
+    srcs = glob(["scalajs/src/main/scala/**/*.scala"]) + [":scalajs_build_info"],
+    resource_strip_prefix = "vendor/ScalablyTypedConverter/scalajs/src/main/resources",
+    resources = glob(["scalajs/src/main/resources/**"]),
+    scalacopts = SCALACOPTS,
+    # ContentForPublish writes ivy.xml and pom.xml as XML literals, so scala-xml is on
+    # the compile classpath of what depends on this too.
+    exports = [
+        ":core",
+        ":logging",
+        "@maven//:org_scala_lang_modules_scala_xml_3",
+    ],
+    deps = [
+        ":core",
+        ":logging",
+        "@maven//:org_scala_lang_modules_scala_xml_3",
+    ],
+)
+
+scala_library(
+    name = "phases",
+    srcs = glob(["phases/src/main/scala/**/*.scala"]),
+    scalacopts = SCALACOPTS,
+    exports = [
+        ":core",
+        ":logging",
+        "@maven//:com_softwaremill_ox_core_3",
+    ],
+    deps = [
+        ":core",
+        ":logging",
+        "@maven//:com_softwaremill_ox_core_3",
+    ],
+)
+
+# `version` names the cache directory PersistingParser keys parsed declarations by, and
+# is the version the Gradle build stamped on the converter (scalablyTypedVersion).
+write_file(
+    name = "importer_portable_build_info",
+    out = "importer-portable/generated/BuildInfo.scala",
+    content = [
+        "package org.scalablytyped.converter.internal",
+        "",
+        "object BuildInfo {",
+        '  val gitSha: String = "bazel"',
+        '  val version: String = "1.0.0-local"',
+        "}",
+        "",
+    ],
+)
+
+scala_library(
+    name = "importer_portable",
+    srcs = glob(["importer-portable/src/main/scala/**/*.scala"]) + [":importer_portable_build_info"],
+    scalacopts = SCALACOPTS,
+    exports = [
+        ":phases",
+        ":scalajs",
+        ":ts",
+    ],
+    deps = [
+        ":phases",
+        ":scalajs",
+        ":ts",
+    ],
+)
+
+scala_library(
+    name = "importer",
+    srcs = glob(["importer/src/main/scala/**/*.scala"]),
+    scalacopts = SCALACOPTS,
+    exports = [":importer_portable"],
+    deps = [
+        ":importer_portable",
+        "@maven//:io_get_coursier_coursier_2_13",
+        "@maven//:org_scala_lang_modules_scala_xml_3",
+    ],
+)
+
+scala_binary(
+    name = "cli",
+    srcs = glob(["cli/src/main/scala/**/*.scala"]),
+    main_class = "org.scalablytyped.converter.cli.Main",
+    scalacopts = SCALACOPTS,
+    deps = [
+        ":importer",
+        "@maven//:com_github_scopt_scopt_3",
+    ],
+)

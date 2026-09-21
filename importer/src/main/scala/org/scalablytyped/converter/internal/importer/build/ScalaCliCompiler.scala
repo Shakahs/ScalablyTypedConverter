@@ -40,6 +40,14 @@ class ScalaCliCompiler private (
       val compileCmd = Seq(
         scalaCliPath,
         "compile",
+        // Compile in this process instead of handing the work to a Bloop daemon. The
+        // daemon outlives the compile, keeps its socket and state under the XDG
+        // directories, and cannot start at all when the build runs the converter in a
+        // sandbox; a build server is of no use here either way, because every library
+        // is compiled exactly once.
+        // `--server false` would be read as the flag plus a positional input named
+        // "false", so the value is attached.
+        "--server=false",
         "--scala",
         versions.scala.scalaVersion,
         "--js",
