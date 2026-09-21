@@ -11,10 +11,9 @@
 #   importer             -> :importer
 #   cli                  -> :cli            (the executable //web/js's conversion runs)
 #
-# The Gradle build assembled the cli into one jar through an sbt exec, because a Gradle
-# configuration could not consume a module of the same build. Bazel has no such limit:
-# the conversion action runs :cli directly, and a change under any module here rebuilds
-# only what depends on it. Tests and the docs site are not built.
+# One target per upstream sbt module rather than one assembled fat jar: the conversion
+# action runs :cli directly, and a change under any module here rebuilds only what
+# depends on it. Tests and the docs site are not built.
 
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rules_scala//scala:scala.bzl", "scala_binary", "scala_library")
@@ -22,7 +21,7 @@ load("@rules_scala//scala:scala.bzl", "scala_binary", "scala_library")
 package(default_visibility = ["//visibility:public"])
 
 # build.sbt's baseSettings. sbt-buildinfo's BuildInfo objects are written below from
-# project/Versions.scala and the version the Gradle build stamped on the converter.
+# project/Versions.scala and the version this build stamps on the converter.
 SCALACOPTS = [
     "-no-indent",
     "-source:3.3",
@@ -133,8 +132,8 @@ scala_library(
     ],
 )
 
-# `version` names the cache directory PersistingParser keys parsed declarations by, and
-# is the version the Gradle build stamped on the converter (scalablyTypedVersion).
+# `version` names the cache directory PersistingParser keys parsed declarations by. It is
+# a constant of this build, not resolved from anywhere: nothing fetches the converter.
 write_file(
     name = "importer_portable_build_info",
     out = "importer-portable/generated/BuildInfo.scala",

@@ -3,8 +3,9 @@ package importer
 
 import org.scalablytyped.converter.internal.importer.LibTsSource.{FromFolder, StdLibSource}
 import org.scalablytyped.converter.internal.seqs._
-import org.scalablytyped.converter.internal.ts.{TsIdent, TsIdentLibrary}
+import org.scalablytyped.converter.internal.ts.{TsIdent, TsIdentLibrary, TsIdentLibraryScoped}
 
+import scala.annotation.tailrec
 import scala.collection.immutable.SortedSet
 
 object Bootstrap {
@@ -92,14 +93,70 @@ object Bootstrap {
     Bootstrapped(inputFolders, libraryResolver, initialLibs)
   }
 
-  def findSources(folders: IArray[InFolder]): IArray[LibTsSource.FromFolder] =
-    folders.foldLeft[IArray[LibTsSource.FromFolder]](IArray.Empty) {
-      case (foundSources, next) =>
-        val foundNames = foundSources.map(_.libName).toSet
-        val newSources = forFolder(next).filterNot(s => foundNames(s.libName))
+  /**
+    * Every library that can be converted, starting from the given folders and following
+    * each package back to the `node_modules` directory it really lives in.
+    *
+    * A flat scan of one directory only finds every library when the package manager has
+    * hoisted the whole dependency graph into it. pnpm does not: a package in
+    * `node_modules` is a symlink into a virtual store, `<store>/<name>@<version>/node_modules/<name>`,
+    * and its own dependencies are that directory's siblings rather than entries of the
+    * top-level folder. A scan that stops at the top level therefore sees the packages that
+    * were asked for and none of what they are written against, so every type a package
+    * re-exports from a dependency silently fails to resolve and the generated facade is
+    * missing the members that came from it.
+    *
+    * Following the symlink and scanning the enclosing `node_modules` finds those
+    * dependencies wherever the package manager put them. It is the same step for the
+    * classic layouts: under a hoisted `node_modules` the enclosing directory is the one
+    * already being scanned, and under a nested one it is the parent package's.
+    *
+    * Sources are still deduplicated by library name, first found winning, so the packages
+    * the input folders name directly keep their identity — and their version — over a copy
+    * reached through some other package's dependencies.
+    */
+  def findSources(folders: IArray[InFolder]): IArray[LibTsSource.FromFolder] = {
+    @tailrec
+    def go(
+        pending: List[InFolder],
+        visited: Set[os.Path],
+        found:   IArray[LibTsSource.FromFolder],
+    ): IArray[LibTsSource.FromFolder] =
+      pending match {
+        case Nil => found
+        case next :: rest =>
+          val real = realPath(next.path)
+          if (visited(real) || !os.isDir(next.path)) go(rest, visited, found)
+          else {
+            val sources    = forFolder(next)
+            val foundNames = found.map(_.libName).toSet
+            val newSources = sources.filterNot(s => foundNames(s.libName))
 
-        foundSources ++ newSources
+            /* `forFolder` leaves `@types` to its own input folder, so each newly reached
+             * `node_modules` contributes its own. */
+            val scoped    = InFolder(next.path / "@types")
+            val enclosing = sources.mapNotNone(enclosingNodeModules).toList
+
+            go(rest ::: scoped :: enclosing, visited + real, found ++ newSources)
+          }
+      }
+
+    go(folders.toList, Set.empty, IArray.Empty)
+  }
+
+  /** The `node_modules` directory a package actually lives in, following symlinks. */
+  private def enclosingNodeModules(source: LibTsSource.FromFolder): Option[InFolder] = {
+    val real = realPath(source.folder.path)
+    val enclosing = source.libName match {
+      /* `@scope/name` sits one directory deeper, in the scope directory. */
+      case _: TsIdentLibraryScoped => real / os.up / os.up
+      case _                       => real / os.up
     }
+    if (enclosing.last == "node_modules" && os.isDir(enclosing)) Some(InFolder(enclosing)) else None
+  }
+
+  private def realPath(path: os.Path): os.Path =
+    if (os.exists(path)) os.Path(path.toNIO.toRealPath()) else path
 
   private def forFolder(folder: InFolder): IArray[LibTsSource.FromFolder] =
     IArray.fromTraversable(

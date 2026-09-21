@@ -47,12 +47,14 @@ object Main {
   )
 
   case class Config(
-      conversion:     ConversionOptions,
-      wantedLibs:     SortedSet[TsIdentLibrary],
-      inDirectory:    os.Path,
-      includeDev:     Boolean,
-      includeProject: Boolean,
-      parallelism:    Int,
+      conversion:          ConversionOptions,
+      wantedLibs:          SortedSet[TsIdentLibrary],
+      inDirectory:         os.Path,
+      includeDev:          Boolean,
+      includeProject:      Boolean,
+      parallelism:         Int,
+      outputDirectory:     Option[os.Path],
+      parseCacheDirectory: Option[os.Path],
   ) {
     lazy val paths = new Paths(inDirectory)
     def mapConversion(f: ConversionOptions => ConversionOptions) = copy(conversion = f(conversion))
@@ -60,15 +62,32 @@ object Main {
 
   val DefaultConfig = Config(
     DefaultOptions,
-    wantedLibs     = SortedSet(),
-    inDirectory    = os.pwd,
-    includeDev     = false,
-    includeProject = false,
-    parallelism    = math.max(2, Runtime.getRuntime.availableProcessors),
+    wantedLibs          = SortedSet(),
+    inDirectory         = os.pwd,
+    includeDev          = false,
+    includeProject      = false,
+    parallelism         = math.max(2, Runtime.getRuntime.availableProcessors),
+    outputDirectory     = None,
+    parseCacheDirectory = None,
   )
 
-  val parseCachePath = Some(files.existing(constants.defaultCacheFolder / "parse").toNIO)
-  val t0             = System.currentTimeMillis
+  /**
+    * Where parsed TypeScript is cached between runs, if anywhere.
+    *
+    * This used to be a `val` that created a directory under the user's home the moment the
+    * class loaded. A run that writes sources for a build system to compile has no business
+    * touching anything outside the directories it was given, and a cache that a caller
+    * cannot point somewhere is one it cannot isolate — so `--outputDirectory` turns the
+    * cache off unless `--parseCacheDirectory` says where to put it.
+    */
+  def parseCachePath(c: Config): Option[java.nio.file.Path] =
+    c.parseCacheDirectory match {
+      case Some(directory)                     => Some(files.existing(directory).toNIO)
+      case None if c.outputDirectory.isDefined => None
+      case None                                => Some(files.existing(constants.defaultCacheFolder / "parse").toNIO)
+    }
+
+  val t0 = System.currentTimeMillis
 
   val logger: Logger[(Array[Logger.Stored], Unit)] =
     storing().zipWith(stdout.filter(LogLevel.warn))
@@ -125,6 +144,19 @@ object Main {
       opt[Boolean]("includeProject")
         .action((x, c) => c.copy(includeProject = x))
         .text("Include project in current directory"),
+      opt[os.Path]('o', "outputDirectory")
+        .action((x, c) => c.copy(outputDirectory = Some(x)))
+        .text(
+          "Write the generated Scala sources to this directory, one subdirectory per library, and stop there. " +
+            "Without it the converter compiles the sources itself and publishes jars to the local ivy repository, " +
+            "which needs a Scala compiler resolved over the network",
+        ),
+      opt[os.Path]("parseCacheDirectory")
+        .action((x, c) => c.copy(parseCacheDirectory = Some(x)))
+        .text(
+          s"Cache parsed typescript here. Defaults to ${constants.defaultCacheFolder / "parse"}, or to no cache at " +
+            "all when --outputDirectory is given",
+        ),
       opt[Int]("parallelism")
         .validate(x => if (x >= 1) success else failure("--parallelism must be at least 1"))
         .action((x, c) => c.copy(parallelism = x))
@@ -199,16 +231,14 @@ object Main {
 
   def mainNoExit(args: Array[String]): Int =
     OParser.parse(ParseConversionOptions, args, DefaultConfig) match {
-      case Some(
-          c @ Config(
-            conversion,
-            libsFromCmdLine,
-            inDir,
-            includeDev,
-            includeProject,
-            parallelism,
-          ),
-          ) =>
+      case Some(c) =>
+        val conversion      = c.conversion
+        val libsFromCmdLine = c.wantedLibs
+        val inDir           = c.inDirectory
+        val includeDev      = c.includeDev
+        val includeProject  = c.includeProject
+        val parallelism     = c.parallelism
+
         val packageJsonPath = c.paths.packageJson.getOrElse(sys.error(s"$inDir does not contain package.json"))
         val nodeModulesPath = c.paths.node_modules.getOrElse(sys.error(s"$inDir does not contain node_modules"))
         require(files.exists(nodeModulesPath / "typescript" / "lib"), "must install typescript")
@@ -261,12 +291,7 @@ object Main {
           ),
         )
 
-        val compiler = Await.result(
-          ScalaCliCompiler(logger.filter(LogLevel.debug).void, conversion.versions, constants.defaultCacheFolder),
-          Duration.Inf,
-        )
-
-        val Pipeline: RecPhase[LibTsSource, PublishedSbtProject] =
+        val ToScalaJs: RecPhase[LibTsSource, LibScalaJs] =
           RecPhase[LibTsSource]
             .next(
               new Phase1ReadTypescript(
@@ -275,7 +300,7 @@ object Main {
                 ignored                 = conversion.ignoredLibs,
                 ignoredModulePrefixes   = conversion.ignoredModulePrefixes,
                 pedantic                = false,
-                parser                  = PersistingParser(parseCachePath, bootstrapped.inputFolders, logger.void),
+                parser                  = PersistingParser(parseCachePath(c), bootstrapped.inputFolders, logger.void),
                 expandTypeMappings      = conversion.expandTypeMappings,
               ),
               "typescript",
@@ -295,34 +320,13 @@ object Main {
               new PhaseFlavour(conversion.flavourImpl, maybePrivateWithin = conversion.privateWithin),
               conversion.flavourImpl.toString,
             )
-            .next(
-              new Phase3Compile(
-                versions                   = conversion.versions,
-                compiler                   = compiler,
-                targetFolder               = c.paths.out,
-                organization               = conversion.organization,
-                publishLocalFolder         = constants.defaultLocalPublishFolder,
-                metadataFetcher            = Npmjs.No,
-                softWrites                 = true,
-                flavour                    = conversion.flavourImpl,
-                generateScalaJsBundlerFile = false,
-                ensureSourceFilesWritten   = true,
-              ),
-              BuildPhase,
-            )
 
-        val results: Map[LibTsSource, PhaseRes[LibTsSource, PublishedSbtProject]] =
+        def run[T](pipeline: RecPhase[LibTsSource, T]): Map[LibTsSource, PhaseRes[LibTsSource, T]] =
           Progress.showing(trackedPhase = BuildPhase, out = System.out) { progress =>
-            PhaseRunner.all(Pipeline, (_: LibTsSource) => logger.void, progress, parallelism)(sources).toMap
+            PhaseRunner.all(pipeline, (_: LibTsSource) => logger.void, progress, parallelism)(sources).toMap
           }
 
-        val td = System.currentTimeMillis - t0
-        logger.warn(td)
-
-        val failures: Map[LibTsSource, Either[Throwable, String]] =
-          results.collect { case (_, PhaseRes.Failure(errors)) => errors }.reduceOption(_ ++ _).getOrElse(Map.empty)
-
-        if (failures.nonEmpty) {
+        def reportFailures(failures: Map[LibTsSource, Either[Throwable, String]]): Int = {
           println(
             Color.Red(s"Failure: You might try --ignoredLibs ${failures.keys.map(_.libName.value).mkString(", ")}"),
           )
@@ -336,30 +340,105 @@ object Main {
           }
 
           1
-        } else {
-          val allSuccesses: Map[LibTsSource, PublishedSbtProject] = {
-            def go(source: LibTsSource, p: PublishedSbtProject): Map[LibTsSource, PublishedSbtProject] =
-              Map(source -> p) ++ p.project.deps.flatMap { case (k, v) => go(k, v) }
-
-            results.collect { case (s, PhaseRes.Ok(res)) => go(s, res) }.reduceOption(_ ++ _).getOrElse(Map.empty)
-          }
-
-          val short: Seq[SbtProject] =
-            results
-              .collect { case (_, PhaseRes.Ok(res)) => res.project }
-              .toSeq
-              .filter(_.name != Name.std.unescaped)
-              .sortBy(_.name)
-
-          println()
-          println(s"Successfully converted ${allSuccesses.keys.map(x => Color.Green(x.libName.value)).mkString(", ")}")
-          println("To use in sbt: ")
-          println(Color.DarkGray(s"""libraryDependencies ++= Seq(
-               |  ${short.map(p => p.reference.asSbt).mkString("", ",\n  ", "")}
-               |)""".stripMargin))
-
-          0
         }
+
+        def failuresOf[T](results: Map[LibTsSource, PhaseRes[LibTsSource, T]]) =
+          results.collect { case (_, PhaseRes.Failure(errors)) => errors }.reduceOption(_ ++ _).getOrElse(Map.empty)
+
+        val exitCode = c.outputDirectory match {
+          /* Sources only: the caller compiles them, so there is no compiler to resolve and
+           * nothing is written outside the directory it named. */
+          case Some(outputDirectory) =>
+            val results = run(
+              ToScalaJs.next(
+                new Phase3Sources(
+                  versions     = conversion.versions,
+                  targetFolder = outputDirectory,
+                  flavour      = conversion.flavourImpl,
+                ),
+                BuildPhase,
+              ),
+            )
+
+            val td = System.currentTimeMillis - t0
+            logger.warn(td)
+
+            val failures = failuresOf(results)
+            if (failures.nonEmpty) reportFailures(failures)
+            else {
+              val written: Map[LibTsSource, GeneratedSources] = {
+                def go(source: LibTsSource, g: GeneratedSources): Map[LibTsSource, GeneratedSources] =
+                  Map(source -> g) ++ g.deps.flatMap { case (k, v) => go(k, v) }
+
+                results.collect { case (s, PhaseRes.Ok(res)) => go(s, res) }.reduceOption(_ ++ _).getOrElse(Map.empty)
+              }
+
+              println()
+              println(
+                s"Wrote sources for ${written.keys.map(x => Color.Green(x.libName.value)).mkString(", ")} " +
+                  s"to $outputDirectory",
+              )
+              0
+            }
+
+          case None =>
+            val compiler = Await.result(
+              ScalaCliCompiler(logger.filter(LogLevel.debug).void, conversion.versions, constants.defaultCacheFolder),
+              Duration.Inf,
+            )
+
+            val results = run(
+              ToScalaJs.next(
+                new Phase3Compile(
+                  versions                   = conversion.versions,
+                  compiler                   = compiler,
+                  targetFolder               = c.paths.out,
+                  organization               = conversion.organization,
+                  publishLocalFolder         = constants.defaultLocalPublishFolder,
+                  metadataFetcher            = Npmjs.No,
+                  softWrites                 = true,
+                  flavour                    = conversion.flavourImpl,
+                  generateScalaJsBundlerFile = false,
+                  ensureSourceFilesWritten   = true,
+                ),
+                BuildPhase,
+              ),
+            )
+
+            val td = System.currentTimeMillis - t0
+            logger.warn(td)
+
+            val failures = failuresOf(results)
+            if (failures.nonEmpty) reportFailures(failures)
+            else {
+              val allSuccesses: Map[LibTsSource, PublishedSbtProject] = {
+                def go(source: LibTsSource, p: PublishedSbtProject): Map[LibTsSource, PublishedSbtProject] =
+                  Map(source -> p) ++ p.project.deps.flatMap { case (k, v) => go(k, v) }
+
+                results.collect { case (s, PhaseRes.Ok(res)) => go(s, res) }.reduceOption(_ ++ _).getOrElse(Map.empty)
+              }
+
+              val short: Seq[SbtProject] =
+                results
+                  .collect { case (_, PhaseRes.Ok(res)) => res.project }
+                  .toSeq
+                  .filter(_.name != Name.std.unescaped)
+                  .sortBy(_.name)
+
+              println()
+              println(
+                s"Successfully converted ${allSuccesses.keys.map(x => Color.Green(x.libName.value)).mkString(", ")}",
+              )
+              println("To use in sbt: ")
+              println(Color.DarkGray(s"""libraryDependencies ++= Seq(
+                   |  ${short.map(p => p.reference.asSbt).mkString("", ",\n  ", "")}
+                   |)""".stripMargin))
+
+              0
+            }
+        }
+
+        exitCode
 
       case _ =>
         1
