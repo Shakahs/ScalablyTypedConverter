@@ -360,7 +360,15 @@ class Phase1ReadTypescript(
           val (finished, transformMs) = timed {
             Phase1ReadTypescript
               .Pipeline(scope, source.libName, expandTypeMappings, involvesReact)
-              .foldLeft(withFilteredModules) { case (acc, f) => f(acc) }
+              .foldLeft(withFilteredModules) {
+                case (acc, (name, f)) =>
+                  val (ret, elapsed) = timed(f(acc))
+                  /* Most of the twenty-odd passes are quick, and the few which aren't are what a slow
+                   * conversion is made of, so those get a line of their own in a normal run. */
+                  if (elapsed > 1000) logger.warn(s"transform $name took $elapsed ms")
+                  else logger.info(s"transform $name took $elapsed ms")
+                  ret
+              }
           }
           logger.warn(s"typescript transforms took $transformMs ms")
 
@@ -378,38 +386,51 @@ class Phase1ReadTypescript(
 }
 
 object Phase1ReadTypescript {
+
+  /** Each pass paired with the name it is timed under, the way [[Phase2ToScalaJs]] names its own */
   def Pipeline(
       scope:              TsTreeScope.Root,
       libName:            TsIdentLibrary,
       expandTypeMappings: Selection[TsIdentLibrary],
       involvesReact:      Boolean,
-  ): List[TsParsedFile => TsParsedFile] =
+  ): List[(String, TsParsedFile => TsParsedFile)] =
     List(
-      T.LibrarySpecific(libName).fold[TsParsedFile => TsParsedFile](identity)(_.visitTsParsedFile(scope)),
-      T.SetJsLocation.visitTsParsedFile(JsLocation.Global(TsQIdent.empty)),
-      (T.SimplifyParents >>
+      "LibrarySpecific" -> T
+        .LibrarySpecific(libName)
+        .fold[TsParsedFile => TsParsedFile](identity)(
+          _.visitTsParsedFile(scope),
+        ),
+      "SetJsLocation" -> T.SetJsLocation.visitTsParsedFile(JsLocation.Global(TsQIdent.empty)),
+      "SimplifyParents+RemoveStubs+InferTypeFromExpr+InferEnumTypes+NormalizeFunctions+MoveStatics" -> (T.SimplifyParents >>
         T.RemoveStubs >> //before HandleCommonJsModules and QualifyReferences
         T.InferTypeFromExpr >>
         T.InferEnumTypes /* before InlineConstEnum */ >>
         T.NormalizeFunctions /* before FlattenTrees */ >>
         T.MoveStatics).visitTsParsedFile(scope.enableUnqualifiedLookup.caching),
-      (modules.HandleCommonJsModules >> modules.RewriteExportStarAs)
+      "HandleCommonJsModules+RewriteExportStarAs" -> (modules.HandleCommonJsModules >> modules.RewriteExportStarAs)
         .visitTsParsedFile(scope), //before QualifyReferences
-      new T.QualifyReferences(skipValidation = false).visitTsParsedFile(scope.enableUnqualifiedLookup.caching),
-      modules.AugmentModules(scope.caching),
-      T.ResolveTypeQueries.visitTsParsedFile(scope.enableUnqualifiedLookup.caching), // before ReplaceExports
-      new modules.ReplaceExports(LoopDetector.initial).visitTsParsedFile(scope.enableUnqualifiedLookup.caching),
-      file => ModuleAsGlobalNamespace(scope.root.libName, file),
-      modules.MoveGlobals.apply,
-      FlattenTrees.apply,
-      (
+      "QualifyReferences" -> new T.QualifyReferences(skipValidation = false)
+        .visitTsParsedFile(scope.enableUnqualifiedLookup.caching),
+      "AugmentModules" -> modules.AugmentModules(scope.caching),
+      "ResolveTypeQueries" -> T.ResolveTypeQueries
+        .visitTsParsedFile(scope.enableUnqualifiedLookup.caching), // before ReplaceExports
+      "ReplaceExports" -> new modules.ReplaceExports(LoopDetector.initial)
+        .visitTsParsedFile(scope.enableUnqualifiedLookup.caching),
+      "ModuleAsGlobalNamespace" -> (file => ModuleAsGlobalNamespace(scope.root.libName, file)),
+      "MoveGlobals" -> modules.MoveGlobals.apply,
+      "FlattenTrees" -> FlattenTrees.apply,
+      "DefaultedTypeArguments+TypeAliasIntersection+RejiggerIntersections" -> (
         T.DefaultedTypeArguments >> //after FlattenTrees
           T.TypeAliasIntersection >> // before ExpandTypeMappings
           T.RejiggerIntersections
       ).visitTsParsedFile(scope.caching),
-      if (expandTypeMappings(libName)) T.ExpandTypeMappings.visitTsParsedFile(scope.caching) else identity, // before ExtractInterfaces
-      if (expandTypeMappings(libName)) T.ExpandTypeMappings.After.visitTsParsedFile(scope.caching) else identity, // before ExtractInterfaces
-      (
+      "ExpandTypeMappings" -> (
+        if (expandTypeMappings(libName)) T.ExpandTypeMappings.visitTsParsedFile(scope.caching) else identity
+      ), // before ExtractInterfaces
+      "ExpandTypeMappings.After" -> (
+        if (expandTypeMappings(libName)) T.ExpandTypeMappings.After.visitTsParsedFile(scope.caching) else identity
+      ), // before ExtractInterfaces
+      "TypeAliasToConstEnum+ForwardCtors+ExpandTypeParams+UnionTypesFromKeyOf+DropProperties+InferReturnTypes+RewriteTypeThis+InlineConstEnum+InlineTrivial" -> (
         T.TypeAliasToConstEnum >>
           T.ForwardCtors >>
           T.ExpandTypeParams >>
@@ -420,15 +441,19 @@ object Phase1ReadTypescript {
           T.InlineConstEnum >>
           T.InlineTrivial
       ).visitTsParsedFile(scope.caching),
-      T.ResolveTypeLookups
+      "ResolveTypeLookups" -> T.ResolveTypeLookups
         .visitTsParsedFile(scope.caching), //before ExpandCallables and ExtractInterfaces, after InlineTrivialTypeAlias and ExpandKeyOfTypeParams
-      x => T.PreferTypeAlias(x, scope), // before extract interfaces
-      T.ExtractInterfaces(libName, TsIdent("anon"), scope.caching), // before things which break initial ordering of members, like `ExtractClasses`
-      (
+      "PreferTypeAlias" -> (x => T.PreferTypeAlias(x, scope)), // before extract interfaces
+      "ExtractInterfaces" -> T.ExtractInterfaces(
+        libName,
+        TsIdent("anon"),
+        scope.caching,
+      ), // before things which break initial ordering of members, like `ExtractClasses`
+      "ExtractClasses+ExpandCallables" -> (
         if (involvesReact) T.ExtractClasses
         else T.ExtractClasses >> T.ExpandCallables
       ).visitTsParsedFile(scope.caching),
-      (T.SplitMethods /* after ExpandCallables */ >>
+      "SplitMethods+RemoveDifficultInheritance+VarToNamespace" -> (T.SplitMethods /* after ExpandCallables */ >>
         T.RemoveDifficultInheritance >>
         T.VarToNamespace // after ExtractClasses
       ).visitTsParsedFile(scope.caching),

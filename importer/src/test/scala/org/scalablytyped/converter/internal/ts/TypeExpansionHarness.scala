@@ -15,12 +15,14 @@ trait TypeExpansionHarness {
   val libName = TsIdentLibrarySimple("testing")
 
   def Transformations(logger: Logger[Unit]): List[TsParsedFile => TsParsedFile] =
-    Phase1ReadTypescript.Pipeline(
-      scope              = TsTreeScope(libName, pedantic = true, Map(), logger),
-      libName            = libName,
-      expandTypeMappings = Selection.All,
-      involvesReact      = true,
-    )
+    Phase1ReadTypescript
+      .Pipeline(
+        scope              = TsTreeScope(libName, pedantic = true, Map(), logger),
+        libName            = libName,
+        expandTypeMappings = Selection.All,
+        involvesReact      = true,
+      )
+      .map { case (_, f) => f }
 
   def run(input: String): TsParsedFile = {
     val parsed       = TsParser.parsedTsFile(input).get

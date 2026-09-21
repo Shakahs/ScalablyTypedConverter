@@ -1,6 +1,6 @@
 package org.scalablytyped.converter.cli
 
-import com.olvind.logging.{stdout, storing, LogLevel, Logger}
+import com.olvind.logging.{stdout, LogLevel, Logger}
 import fansi.{Attr, Color, Str}
 import org.scalablytyped.converter.internal.importer._
 import org.scalablytyped.converter.internal.importer.build.{PublishedSbtProject, SbtProject, ScalaCliCompiler}
@@ -89,8 +89,15 @@ object Main {
 
   val t0 = System.currentTimeMillis
 
-  val logger: Logger[(Array[Logger.Stored], Unit)] =
-    storing().zipWith(stdout.filter(LogLevel.warn))
+  /**
+    * Only what the run prints.
+    *
+    * A `storing()` logger used to be zipped in beside this one, and nothing ever read what it stored:
+    * every call at every level was formatted, wrapped in a record and pushed onto one list shared by
+    * every thread in the run, and kept there until the run ended.
+    */
+  val logger: Logger[Unit] =
+    stdout.filter(LogLevel.warn)
 
   implicit val ReadsFlavour: Read[Flavour] =
     Read.reads(s => Flavour.byName.getOrElse(s, sys.error(s"'$s' is not among ${Flavour.byName.keys}")))
