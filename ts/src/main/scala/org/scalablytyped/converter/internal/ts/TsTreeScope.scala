@@ -77,10 +77,11 @@ sealed trait TsTreeScope {
 
     val res = lookupInternal(picker, qname.parts, LoopDetector.initial)
 
+    /* A second, discarded `lookupInternal` used to run here, so the failing lookup could be stepped
+     * through in a debugger. Every name which doesn't resolve is looked up twice that way, and
+     * `QualifyReferences` — which looks up every type reference in a library, unresolved ones
+     * included — is the most expensive pass there is. */
     if (res.isEmpty && !skipValidation) {
-      //unused, it's just for easier debugging
-      lookupInternal(picker, qname.parts, LoopDetector.initial)
-
       logger.fatalMaybe(s"Cannot resolve $qname", root.pedantic)
     }
     res
