@@ -67,6 +67,7 @@ lazy val `importer-portable` = project
   .in(file("importer-portable"))
   .configure(baseSettings)
   .dependsOn(ts, scalajs, phases)
+  .settings(libraryDependencies ++= Seq(Deps.ox))
   .enablePlugins(BuildInfoPlugin)
   .settings(
     buildInfoPackage := "org.scalablytyped.converter.internal",

@@ -8,7 +8,9 @@ import org.scalablytyped.converter.internal.phases.{GetDeps, IsCircular, Phase, 
 import org.scalablytyped.converter.internal.ts.TsTreeScope.LoopDetector
 import org.scalablytyped.converter.internal.ts.modules.ModuleAsGlobalNamespace
 import org.scalablytyped.converter.internal.ts.{transforms => T, _}
+import ox.mapPar
 
+import scala.annotation.tailrec
 import scala.collection.immutable.{SortedMap, SortedSet}
 import scala.collection.mutable
 
@@ -23,6 +25,7 @@ class Phase1ReadTypescript(
     ignoredModulePrefixes:   Set[List[String]],
     pedantic:                Boolean,
     parser:                  InFile => Either[String, TsParsedFile],
+    parseParallelism:        Int,
     expandTypeMappings:      Selection[TsIdentLibrary],
 ) extends Phase[LibTsSource, LibTsSource, LibTs] {
 
@@ -55,6 +58,63 @@ class Phase1ReadTypescript(
         specs.mapNotNone(spec => LibraryResolver.file(file.folder, spec.value))
     }
 
+  /** The files `file` inlines through its `reference` directives, and the directives which didn't resolve */
+  def inlinedFiles(
+      source: LibTsSource,
+      file:   InFile,
+      parsed: TsParsedFile,
+  ): IArray[Either[Directive.Ref, InFile]] =
+    parsed.directives.collect {
+      case dir @ Directive.PathRef(stringPath) =>
+        LibraryResolver.file(file.folder, stringPath).toRight(dir)
+      case dir @ Directive.LibRef(value) if source.libName === TsIdent.std =>
+        LibraryResolver.file(resolve.stdLib.folder, s"lib.$value.d.ts").toRight(dir)
+    }
+
+  /**
+    * Every file the preprocessing in [[apply]] will ask for, parsed, `parseParallelism` files at a time.
+    *
+    * Parsing a file needs nothing from any other file, while the preprocessing which follows it cannot be
+    * spread out the same way: a file inlines the files its directives point to, and [[Lazy]] tells a cycle
+    * from an ordinary revisit by finding a computation already in progress, which only holds within one
+    * thread. So the parsing is lifted out of it and done first, and the preprocessing finds the files it
+    * asks for already parsed.
+    *
+    * Only a parsed file says which files it inlines, so the set is taken in waves: the roots, then what
+    * those point to, and so on. A file outside `included` is left out, just as the preprocessing refuses
+    * to inline one. This is the same set of files the preprocessing would have parsed by itself.
+    */
+  def parseFiles(
+      source:   LibTsSource,
+      included: Set[InFile],
+      roots:    IArray[InFile],
+  ): Map[InFile, Either[String, TsParsedFile]] = {
+    @tailrec
+    def go(
+        pending: Vector[InFile],
+        parsed:  Map[InFile, Either[String, TsParsedFile]],
+    ): Map[InFile, Either[String, TsParsedFile]] =
+      pending.distinct.filterNot(parsed.contains) match {
+        case Vector() => parsed
+        case wave =>
+          val parseOne: InFile => (InFile, Either[String, TsParsedFile]) = file => file -> parser(file)
+
+          val parsedWave: Vector[(InFile, Either[String, TsParsedFile])] =
+            if (wave.sizeIs < 2 || parseParallelism < 2) wave.map(parseOne)
+            else wave.mapPar(parseParallelism)(parseOne)
+
+          val referenced: Vector[InFile] =
+            parsedWave.flatMap {
+              case (file, Right(parsed)) => inlinedFiles(source, file, parsed).mapNotNone(_.toOption).toVector
+              case (_, Left(_))          => Vector.empty
+            }
+
+          go(referenced.filter(included), parsed ++ parsedWave)
+      }
+
+    go(roots.toVector.filter(included), Map.empty)
+  }
+
   override def apply(
       source:     LibTsSource,
       _1:         LibTsSource,
@@ -83,13 +143,24 @@ class Phase1ReadTypescript(
               else PathsFromTsLibSource.filesFrom(f.folder)
           }
 
+        val (parsedFiles, parseMs) = timed {
+          /* For the stdlib only the files the wanted `lib.*.d.ts` pull in are preprocessed, not every
+           * file beside them in typescript's `lib` folder, so those are the roots to follow. */
+          val roots = source match {
+            case LibTsSource.StdLibSource(_, files, _) => files
+            case _: LibTsSource.FromFolder => includedFiles
+          }
+          parseFiles(source, includedFiles.toSet, roots)
+        }
+        logger.warn(s"parsed ${parsedFiles.size} files in $parseMs ms")
+
         val includedViaDirective = mutable.Set.empty[InFile]
 
         lazy val preparingFiles: SortedMap[InFile, Lazy[(TsParsedFile, Set[LibTsSource])]] =
           includedFiles.sorted
             .map { file =>
               file -> Lazy {
-                parser(file) match {
+                parsedFiles.getOrElse(file, parser(file)) match {
                   case Left(msg) =>
                     logger.withContext(file).fatal(s"Couldn't parse: $msg")
                   case Right(parsed) =>
@@ -99,12 +170,7 @@ class Phase1ReadTypescript(
                     fileLogger.info(s"Preprocessing")
 
                     val toInline: IArray[Either[Directive.Ref, InFile]] =
-                      parsed.directives.collect {
-                        case dir @ Directive.PathRef(stringPath) =>
-                          LibraryResolver.file(file.folder, stringPath).toRight(dir)
-                        case dir @ Directive.LibRef(value) if source.libName === TsIdent.std =>
-                          LibraryResolver.file(resolve.stdLib.folder, s"lib.$value.d.ts").toRight(dir)
-                      }
+                      inlinedFiles(source, file, parsed)
 
                     val moduleNames = LibraryResolver.moduleNameFor(source, file)
 
@@ -203,7 +269,7 @@ class Phase1ReadTypescript(
             .toMap
             .toSorted
 
-        val (preparedFiles, parseMs) = timed {
+        val (preparedFiles, preprocessMs) = timed {
           // evaluate all, don't refactor and combine this with other steps
           val base: SortedMap[InFile, (TsParsedFile, Set[LibTsSource])] =
             source match {
@@ -225,7 +291,7 @@ class Phase1ReadTypescript(
             case (_, fileResult)                         => IArray(fileResult)
           }
         }
-        logger.warn(s"parsed ${includedFiles.length} files in $parseMs ms")
+        logger.warn(s"preprocessed ${preparedFiles.length} files in $preprocessMs ms")
 
         if (preparedFiles.isEmpty) {
           logger.warn(s"No typescript definitions files found for library ${source.libName.value}")

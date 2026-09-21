@@ -301,6 +301,7 @@ object Main {
                 ignoredModulePrefixes   = conversion.ignoredModulePrefixes,
                 pedantic                = false,
                 parser                  = PersistingParser(parseCachePath(c), bootstrapped.inputFolders, logger.void),
+                parseParallelism        = parallelism,
                 expandTypeMappings      = conversion.expandTypeMappings,
               ),
               "typescript",

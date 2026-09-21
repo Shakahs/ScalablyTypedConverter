@@ -150,7 +150,7 @@ object Bootstrap {
     val enclosing = source.libName match {
       /* `@scope/name` sits one directory deeper, in the scope directory. */
       case _: TsIdentLibraryScoped => real / os.up / os.up
-      case _                       => real / os.up
+      case _ => real / os.up
     }
     if (enclosing.last == "node_modules" && os.isDir(enclosing)) Some(InFolder(enclosing)) else None
   }

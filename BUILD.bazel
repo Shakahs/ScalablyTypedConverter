@@ -161,6 +161,8 @@ scala_library(
         ":phases",
         ":scalajs",
         ":ts",
+        # Phase1ReadTypescript parses a library's files in parallel.
+        "@maven//:com_softwaremill_ox_core_3",
     ],
 )
 

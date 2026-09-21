@@ -89,6 +89,7 @@ trait ImporterHarness extends AnyFunSuite {
             ignoredModulePrefixes   = Set.empty,
             pedantic                = pedantic,
             parser                  = parser.parseFile,
+            parseParallelism        = 4,
             expandTypeMappings      = EnabledTypeMappingExpansion.DefaultSelection,
           ),
           "typescript",

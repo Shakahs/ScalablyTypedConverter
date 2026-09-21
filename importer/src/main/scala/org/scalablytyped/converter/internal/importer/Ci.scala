@@ -265,6 +265,7 @@ class Ci(config: Ci.Config, paths: Ci.Paths, pool: ForkJoinPool, ec: ExecutionCo
             ignoredModulePrefixes   = config.conversion.ignoredModulePrefixes,
             pedantic                = config.pedantic,
             parser                  = PersistingParser(paths.parseCache, IArray(externalsFolder, dtFolder), logger.void),
+            parseParallelism        = config.parallelLibraries,
             expandTypeMappings      = config.conversion.expandTypeMappings,
           ),
           "typescript",
