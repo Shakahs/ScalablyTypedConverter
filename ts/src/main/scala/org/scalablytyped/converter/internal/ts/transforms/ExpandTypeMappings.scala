@@ -300,13 +300,29 @@ object ExpandTypeMappings extends TreeTransformationScopedChanges {
   }
 
   /**
-    * This is obviously not much of an implementation, just enough to get @material-ui/core running
+    * This is obviously not much of an implementation, just enough to get @material-ui/core running, and to pick the
+    * branch of `[T] extends [never] ? A : B`, the idiom for an omitted `T = never` type argument, once `T` is known
     */
-  def evaluatePredicate(x: TsType): Res[Boolean] =
+  def evaluatePredicate(scope: TsTreeScope)(x: TsType): Res[Boolean] =
     x match {
       case TsTypeExtends(_, TsTypeRef.any) => Ok(true, wasRewritten = false)
-      case other                           => Problems(IArray(UnsupportedPredicate(other)))
+      case TsTypeExtends(
+          TsTypeTuple(IArray.exactlyOne(checked)),
+          TsTypeTuple(IArray.exactlyOne(TsTupleElement(_, TsTypeRef.never))),
+          ) =>
+        FollowAliases(scope)(checked.tpe) match {
+          case TsTypeRef.never => Ok(true, wasRewritten = true)
+          case _: TsTypeLiteral | _: TsTypeObject | _: TsTypeFunction | _: TsTypeTuple =>
+            Ok(false, wasRewritten = true)
+          case TsTypeRef(_, name, _) if PrimitivesOtherThanNever(name) => Ok(false, wasRewritten = true)
+          case _                                                       => Problems(IArray(UnsupportedPredicate(x)))
+        }
+      case other => Problems(IArray(UnsupportedPredicate(other)))
     }
+
+  /* primitives that are certainly not `never`; `any` and `unknown` are left undecided, as TypeScript treats them apart */
+  private val PrimitivesOtherThanNever: Set[TsQIdent] =
+    TsQIdent.Primitive -- Set(TsQIdent.any, TsQIdent.never, TsQIdent.unknown)
 
   object AllMembersFor {
     def forType(scope: TsTreeScope, ld: LoopDetector)(tpe: TsType): Res[IArray[TsMember]] =
@@ -368,7 +384,7 @@ object ExpandTypeMappings extends TreeTransformationScopedChanges {
 //          foo
         case TsTypeConditional(pred, ifTrue, ifFalse) =>
           for {
-            conforms <- evaluatePredicate(pred)
+            conforms <- evaluatePredicate(scope)(pred)
             ret <- forType(scope, ld)(if (conforms) ifTrue else ifFalse)
           } yield ret
 

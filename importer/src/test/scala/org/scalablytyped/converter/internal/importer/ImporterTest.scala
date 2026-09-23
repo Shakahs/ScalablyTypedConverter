@@ -57,6 +57,7 @@ trait ImporterTest extends AnyFunSuite with ImporterHarness with ParallelTestExe
   test("documentation")(assertImportsOk("documentation", pedantic                   = true))
   test("swiz")(assertImportsOk("swiz", pedantic                                     = true))
   test("defaulted-tparams")(assertImportsOk("defaulted-tparams", pedantic           = true))
+  test("marker-overloads")(assertImportsOk("marker-overloads", pedantic             = true))
   test("union-to-inheritance")(assertImportsOk("union-to-inheritance", pedantic     = true))
   test("expand-type-parameters")(assertImportsOk("expand-type-parameters", pedantic = true))
   test("const-enum")(assertImportsOk("const-enum", pedantic                         = true))

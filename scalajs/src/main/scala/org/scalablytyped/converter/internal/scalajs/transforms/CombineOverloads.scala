@@ -115,9 +115,8 @@ class CombineOverloads(erasure: Erasure) extends TreeTransformation {
 
         if (typeName === QualifiedName.UNION)
           TypeRef.Union(sameTypeName.flatMap(_.targs), NoComments, sort = true)
-        else if (typeName === QualifiedName.INTERSECTION)
-          TypeRef.Intersection(sameTypeName.flatMap(_.targs), NoComments)
-        else if (TypeRef.Literal(typeName))
+        /* an argument satisfies one overload's intersection or another's, never all of their parts at once */
+        else if (typeName === QualifiedName.INTERSECTION || TypeRef.Literal(typeName))
           TypeRef.Union(sameTypeName.distinct, NoComments, sort = true)
         else {
           val combinedTArgs: IArray[TypeRef] = sameTypeName.map(_.targs).transpose.map(asUnionType)

@@ -3137,6 +3137,18 @@ export {};
     )
   }
 
+  test("template string without substitutions") {
+    shouldParseAs(
+      "Options[`retry`]",
+      TsParser.tsType,
+    )(
+      TsTypeLookup(
+        TsTypeRef(NoComments, TsQIdent(IArray(TsIdentSimple("Options"))), Empty),
+        TsTypeLiteral(TsLiteral.Str("retry")),
+      ),
+    )
+  }
+
   test("+readonly") {
     val O = TsTypeRef(NoComments, TsQIdent(IArray(TsIdentSimple("O"))), Empty)
     val K = TsTypeRef(NoComments, TsQIdent(IArray(TsIdentSimple("K"))), Empty)

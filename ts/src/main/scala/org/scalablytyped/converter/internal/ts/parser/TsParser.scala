@@ -493,10 +493,13 @@ class TsParser(path: Option[(os.Path, Int)]) extends StdTokenParsers with Parser
       | "typeof" ~> tsTypeRef ^^ { case TsTypeRef(_, name, _) => TsTypeQuery(name) } // todo: targs may be used to with `typoeof f<asd>`
       | tsTypeTuple
       | tsLiteral ^^ TsTypeLiteral
-      | tsLiteralTemplateString ^^ (
-          chars =>
-            TsTypeRef.string.copy(comments = Comments(s"/* template literal string: $chars */")),
-        )
+      | tsLiteralTemplateString ^^ {
+        /* a template without substitutions is exactly the string it spells, as in the key of `Options[`retry`]` */
+        case TsLexer.StringTemplateLiteral(parts) if parts.forall(_.isLeft) =>
+          TsTypeLiteral(TsLiteral.Str(parts.collect { case Left(char) => char }.mkString))
+        case lit =>
+          TsTypeRef.string.copy(comments = Comments(s"/* template literal string: ${lit.chars} */"))
+      }
       | "this" ~> success(TsTypeThis())
       | "asserts" ~> tsIdent ~ ("is" ~> tsType).? ^^ TsTypeAsserts
       | tsTypeKeyOf
@@ -696,11 +699,8 @@ class TsParser(path: Option[(os.Path, Int)]) extends StdTokenParsers with Parser
       case _ => false
     }) ^^ (lit => TsLiteral.Str(lit.chars))
 
-  lazy val tsLiteralTemplateString: Parser[String] =
-    elem("string literal", {
-      case _: TsLexer.StringTemplateLiteral => true
-      case _ => false
-    }) ^^ (lit => lit.chars)
+  lazy val tsLiteralTemplateString: Parser[TsLexer.StringTemplateLiteral] =
+    accept("template literal", { case lit: TsLexer.StringTemplateLiteral => lit })
 
   lazy val tsIdentModule: Parser[TsIdentModule] =
     tsLiteralString ^^ ModuleNameParser.apply

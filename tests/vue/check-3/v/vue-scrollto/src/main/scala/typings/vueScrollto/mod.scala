@@ -187,41 +187,31 @@ object mod {
   /* augmented module */
   object vueTypesVueAugmentingMod {
     
-    trait Vue extends StObject {
+    @js.native
+    trait Vue
+      extends StObject
+         with typings.vue.typesVueMod.Vue {
       
       @JSName("$scrollTo")
-      def $scrollTo(element: String): Unit
+      def $scrollTo(element: String): Unit = js.native
       @JSName("$scrollTo")
-      def $scrollTo(element: String, duration: Double): Unit
+      def $scrollTo(element: String, duration: Double): Unit = js.native
       @JSName("$scrollTo")
-      def $scrollTo(element: String, duration: Double, options: Options): Unit
+      def $scrollTo(element: String, duration: Double, options: Options): Unit = js.native
       @JSName("$scrollTo")
-      def $scrollTo(element: String, options: Options): Unit
+      def $scrollTo(element: String, options: Options): Unit = js.native
       @JSName("$scrollTo")
-      def $scrollTo(element: Element): Unit
+      def $scrollTo(element: Element): Unit = js.native
       @JSName("$scrollTo")
-      def $scrollTo(element: Element, duration: Double): Unit
+      def $scrollTo(element: Element, duration: Double): Unit = js.native
       @JSName("$scrollTo")
-      def $scrollTo(element: Element, duration: Double, options: Options): Unit
+      def $scrollTo(element: Element, duration: Double, options: Options): Unit = js.native
       @JSName("$scrollTo")
-      def $scrollTo(element: Element, options: Options): Unit
+      def $scrollTo(element: Element, options: Options): Unit = js.native
       @JSName("$scrollTo")
-      def $scrollTo(options: Options): Unit
+      def $scrollTo(options: Options): Unit = js.native
       @JSName("$scrollTo")
-      var $scrollTo_Original: VueStatic
-    }
-    object Vue {
-      
-      inline def apply($scrollTo: VueStatic): Vue = {
-        val __obj = js.Dynamic.literal($scrollTo = $scrollTo.asInstanceOf[js.Any])
-        __obj.asInstanceOf[Vue]
-      }
-      
-      @scala.inline
-      implicit open class MutableBuilder[Self <: Vue] (val x: Self) extends AnyVal {
-        
-        inline def set$scrollTo(value: VueStatic): Self = StObject.set(x, "$scrollTo", value.asInstanceOf[js.Any])
-      }
+      var $scrollTo_Original: VueStatic = js.native
     }
   }
 }

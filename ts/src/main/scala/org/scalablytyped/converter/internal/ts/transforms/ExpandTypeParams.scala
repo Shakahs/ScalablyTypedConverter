@@ -71,17 +71,27 @@ object ExpandTypeParams extends TransformMembers with TransformClassMembers {
       case other => IArray(other)
     }
 
-  def expandTParams(scope: TsTreeScope, sig: TsFunSig): Option[IArray[TsFunSig]] = {
-    val expandables = sig.tparams.mapNotNone(expandable(scope, sig))
-    val expanded = expandables
-      .foldLeft(IArray(sig)) {
-        case (currentSigs, exp) => currentSigs.flatMap(expandSignature(scope, exp))
-      }
+  /** A signature expands into at most this many overloads; past it, its type parameters are kept as they are. */
+  val MaxExpandedSignatures = 200
 
-    expanded.length match {
-      case n if n === 0 || n > 200 => None
-      case _                       => Some(expanded)
+  /**
+    * Each expandable type parameter multiplies the overloads by the same factor whatever signature it is applied to,
+    * so the count is known from the substitutions alone, before any signature is rewritten. A signature past the limit
+    * is left unexpanded without building the product first: several type parameters with a few variants each make it
+    * large enough to exhaust the heap before it could be counted and discarded.
+    */
+  def expandTParams(scope: TsTreeScope, sig: TsFunSig): Option[IArray[TsFunSig]] = {
+    val expansions = sig.tparams.mapNotNone(expandable(scope, sig)).map(exp => (exp, substitutions(scope, exp)))
+    val count = expansions.foldLeft(1L) {
+      case (n, _) if n > MaxExpandedSignatures => n
+      case (n, (exp, subs))                    => n * (subs.length + (if (exp.toKeepInBounds.isDefined) 1 else 0))
     }
+
+    if (count === 0L || count > MaxExpandedSignatures) None
+    else
+      Some(expansions.foldLeft(IArray(sig)) {
+        case (currentSigs, (exp, subs)) => currentSigs.flatMap(expandSignature(exp, subs))
+      })
   }
 
   def expandable(scope: TsTreeScope, sig: TsFunSig)(tp: TsTypeParam): Option[ExpandableTypeParam] = {
@@ -128,7 +138,32 @@ object ExpandTypeParams extends TransformMembers with TransformClassMembers {
     case tr: TsTypeRef if tr.tparams.forall(x => !isAny(x)) && !isAny(tr) && !scope.isAbstract(tr.name) => Left(tr)
   }
 
-  def expandSignature(scope: TsTreeScope, exp: ExpandableTypeParam)(sig: TsFunSig): IArray[TsFunSig] = {
+  /**
+    * The rewrites one expandable type parameter is expanded through: one per type its bound names, and one per
+    * property of the type a `keyof` bound names. They depend on the type parameter alone, not on the signature.
+    */
+  def substitutions(scope: TsTreeScope, exp: ExpandableTypeParam): IArray[Map[TsType, TsType]] =
+    exp.toExpand.flatMap {
+      case Left(tr) =>
+        IArray(Map[TsType, TsType](TsTypeRef(exp.typeParam) -> clearCircularRef(exp.typeParam, tr)))
+
+      case Right(TsTypeKeyOf(ref: TsTypeRef)) =>
+        AllMembersFor(scope, LoopDetector.initial)(ref).collect {
+          case TsMemberProperty(_, _, TsIdentSimple(n), Some(tpe), _, false, _) =>
+            Map[TsType, TsType](
+              TsTypeRef(exp.typeParam) -> TsTypeLiteral(TsLiteral.Str(n)),
+              TsTypeLookup(ref, TsTypeLiteral(TsLiteral.Str(n))) -> tpe,
+            )
+        }
+
+      case Right(other) =>
+        /* enforced in `ExpandableTypes` but not proved */
+        sys.error(s"Unexpected: $other")
+    }
+
+  def expandSignature(exp: ExpandableTypeParam, substitutions: IArray[Map[TsType, TsType]])(
+      sig:                 TsFunSig,
+  ): IArray[TsFunSig] = {
 
     val keptInBounds: Option[TsFunSig] =
       exp.toKeepInBounds.map { types =>
@@ -143,32 +178,7 @@ object ExpandTypeParams extends TransformMembers with TransformClassMembers {
 
     val sigCleaned = sig.copy(tparams = sig.tparams.filterNot(tp => exp.typeParam === tp.name))
 
-    val expanded = exp.toExpand.flatMap {
-      case Left(tr) =>
-        val rewrites = Map[TsType, TsType](
-          TsTypeRef(exp.typeParam) -> clearCircularRef(exp.typeParam, tr),
-        )
-
-        IArray(new TypeRewriter(sigCleaned).visitTsFunSig(rewrites)(sigCleaned))
-
-      case Right(TsTypeKeyOf(ref: TsTypeRef)) =>
-        val members = AllMembersFor(scope, LoopDetector.initial)(ref)
-
-        members.collect {
-          case TsMemberProperty(_, _, TsIdentSimple(n), Some(tpe), _, false, _) =>
-            val rewrites = Map[TsType, TsType](
-              TsTypeRef(exp.typeParam) -> TsTypeLiteral(TsLiteral.Str(n)),
-              TsTypeLookup(ref, TsTypeLiteral(TsLiteral.Str(n))) -> tpe,
-            )
-
-            new TypeRewriter(sigCleaned).visitTsFunSig(rewrites)(sigCleaned)
-        }
-
-      case Right(other) =>
-        /* enforced in `ExpandableTypes` but not proved */
-        sys.error(s"Unexpected: $other")
-
-    }
+    val expanded = substitutions.map(rewrites => new TypeRewriter(sigCleaned).visitTsFunSig(rewrites)(sigCleaned))
 
     expanded ++ IArray.fromOption(keptInBounds)
   }
