@@ -74,11 +74,11 @@ private[internal] object StBuildingComponent {
        with StBuildingComponent[R]
   
   inline implicit def make[R <: js.Object](comp: StBuildingComponent[R]): VdomElement = {
-    if (!scalajs.runtime.linkingInfo.productionMode) {
+    if (!scalajs.LinkingInfo.productionMode) {
     if (comp.args(0) == null) throw new IllegalStateException("This component has already been built into a ReactElement, and cannot be reused")
   }
     val ret = (ReactRaw.createElement.applyDynamic("apply")(ReactRaw, comp.args)).asInstanceOf[Element]
-    if (!scalajs.runtime.linkingInfo.productionMode) {
+    if (!scalajs.LinkingInfo.productionMode) {
     comp.args.update(0, null)
   }
     VdomElement(ret)

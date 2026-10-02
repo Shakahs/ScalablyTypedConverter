@@ -538,7 +538,7 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
         If(
           Unary(
             "!",
-            Ref(QualifiedName.scala_scalajs).select("runtime", "linkingInfo", "productionMode"),
+            Ref(QualifiedName.scala_scalajs).select("LinkingInfo", "productionMode"),
           ),
           Block(expr),
           None,

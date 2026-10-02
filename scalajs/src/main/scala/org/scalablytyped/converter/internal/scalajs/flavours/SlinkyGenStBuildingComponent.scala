@@ -425,7 +425,7 @@ class SlinkyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Versio
         If(
           Unary(
             "!",
-            Ref(QualifiedName.scala_scalajs).select("runtime", "linkingInfo", "productionMode"),
+            Ref(QualifiedName.scala_scalajs).select("LinkingInfo", "productionMode"),
           ),
           Block(expr),
           None,
