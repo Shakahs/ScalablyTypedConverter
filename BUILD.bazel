@@ -20,6 +20,10 @@ load("@rules_scala//scala:scala.bzl", "scala_binary", "scala_library")
 
 package(default_visibility = ["//visibility:public"])
 
+# Third-party source, compiled with its own dialect settings, which is exactly why it is not
+# held to this project's lint rules (//tools/lint).
+NO_LINT = ["no-lint"]
+
 # build.sbt's baseSettings. sbt-buildinfo's BuildInfo objects are written below from
 # project/Versions.scala and the version this build stamps on the converter.
 SCALACOPTS = [
@@ -29,6 +33,7 @@ SCALACOPTS = [
 
 scala_library(
     name = "logging",
+    tags = NO_LINT,
     srcs = glob(["logging/src/main/scala/**/*.scala"]),
     scalacopts = SCALACOPTS,
     exports = [
@@ -58,6 +63,7 @@ CORE_DEPS = [
 
 scala_library(
     name = "core",
+    tags = NO_LINT,
     srcs = glob(["core/src/main/scala/**/*.scala"]),
     scalacopts = SCALACOPTS,
     exports = CORE_DEPS,
@@ -66,6 +72,7 @@ scala_library(
 
 scala_library(
     name = "ts",
+    tags = NO_LINT,
     srcs = glob(["ts/src/main/scala/**/*.scala"]),
     scalacopts = SCALACOPTS,
     # TsLexer/TsParser extend the parser-combinator classes, so their TASTy names them.
@@ -98,6 +105,7 @@ write_file(
 
 scala_library(
     name = "scalajs",
+    tags = NO_LINT,
     srcs = glob(["scalajs/src/main/scala/**/*.scala"]) + [":scalajs_build_info"],
     resource_strip_prefix = "vendor/ScalablyTypedConverter/scalajs/src/main/resources",
     resources = glob(["scalajs/src/main/resources/**"]),
@@ -118,6 +126,7 @@ scala_library(
 
 scala_library(
     name = "phases",
+    tags = NO_LINT,
     srcs = glob(["phases/src/main/scala/**/*.scala"]),
     scalacopts = SCALACOPTS,
     exports = [
@@ -150,6 +159,7 @@ write_file(
 
 scala_library(
     name = "importer_portable",
+    tags = NO_LINT,
     srcs = glob(["importer-portable/src/main/scala/**/*.scala"]) + [":importer_portable_build_info"],
     scalacopts = SCALACOPTS,
     exports = [
@@ -168,6 +178,7 @@ scala_library(
 
 scala_library(
     name = "importer",
+    tags = NO_LINT,
     srcs = glob(["importer/src/main/scala/**/*.scala"]),
     scalacopts = SCALACOPTS,
     exports = [":importer_portable"],
@@ -180,6 +191,7 @@ scala_library(
 
 scala_binary(
     name = "cli",
+    tags = NO_LINT,
     srcs = glob(["cli/src/main/scala/**/*.scala"]),
     main_class = "org.scalablytyped.converter.cli.Main",
     scalacopts = SCALACOPTS,
