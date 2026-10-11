@@ -33,9 +33,9 @@ SCALACOPTS = [
 
 scala_library(
     name = "logging",
-    tags = NO_LINT,
     srcs = glob(["logging/src/main/scala/**/*.scala"]),
     scalacopts = SCALACOPTS,
+    tags = NO_LINT,
     exports = [
         "@maven//:com_lihaoyi_fansi_3",
         "@maven//:com_lihaoyi_sourcecode_3",
@@ -49,9 +49,10 @@ scala_library(
 # What build.sbt gives `core`. Their own dependencies — cats under circe, geny under
 # os-lib, jackson-databind under circe-jackson, scala-collection-compat — reach the
 # compile classpath through //tools/scala:erp_toolchain's plus-one dependency mode, as
-# they did in sbt. `core` exports the set because os.Path, circe's codecs and IArray are
-# in the signatures every module downstream compiles against.
+# they did in sbt, plus cats-kernel. `core` exports the set because os.Path, circe's codecs
+# and IArray are in the signatures every module downstream compiles against.
 CORE_DEPS = [
+    "@maven//:org_typelevel_cats_kernel_3",
     "@maven//:com_lihaoyi_ammonite_ops_2_13",
     "@maven//:com_lihaoyi_os_lib_2_13",
     "@maven//:com_lihaoyi_sourcecode_3",
@@ -63,18 +64,18 @@ CORE_DEPS = [
 
 scala_library(
     name = "core",
-    tags = NO_LINT,
     srcs = glob(["core/src/main/scala/**/*.scala"]),
     scalacopts = SCALACOPTS,
+    tags = NO_LINT,
     exports = CORE_DEPS,
     deps = CORE_DEPS,
 )
 
 scala_library(
     name = "ts",
-    tags = NO_LINT,
     srcs = glob(["ts/src/main/scala/**/*.scala"]),
     scalacopts = SCALACOPTS,
+    tags = NO_LINT,
     # TsLexer/TsParser extend the parser-combinator classes, so their TASTy names them.
     exports = [
         ":core",
@@ -105,11 +106,11 @@ write_file(
 
 scala_library(
     name = "scalajs",
-    tags = NO_LINT,
     srcs = glob(["scalajs/src/main/scala/**/*.scala"]) + [":scalajs_build_info"],
     resource_strip_prefix = "vendor/ScalablyTypedConverter/scalajs/src/main/resources",
     resources = glob(["scalajs/src/main/resources/**"]),
     scalacopts = SCALACOPTS,
+    tags = NO_LINT,
     # ContentForPublish writes ivy.xml and pom.xml as XML literals, so scala-xml is on
     # the compile classpath of what depends on this too.
     exports = [
@@ -126,9 +127,9 @@ scala_library(
 
 scala_library(
     name = "phases",
-    tags = NO_LINT,
     srcs = glob(["phases/src/main/scala/**/*.scala"]),
     scalacopts = SCALACOPTS,
+    tags = NO_LINT,
     exports = [
         ":core",
         ":logging",
@@ -159,9 +160,9 @@ write_file(
 
 scala_library(
     name = "importer_portable",
-    tags = NO_LINT,
     srcs = glob(["importer-portable/src/main/scala/**/*.scala"]) + [":importer_portable_build_info"],
     scalacopts = SCALACOPTS,
+    tags = NO_LINT,
     exports = [
         ":phases",
         ":scalajs",
@@ -178,23 +179,24 @@ scala_library(
 
 scala_library(
     name = "importer",
-    tags = NO_LINT,
     srcs = glob(["importer/src/main/scala/**/*.scala"]),
     scalacopts = SCALACOPTS,
+    tags = NO_LINT,
     exports = [":importer_portable"],
     deps = [
         ":importer_portable",
         "@maven//:io_get_coursier_coursier_2_13",
+        "@maven//:io_get_coursier_coursier_util_2_13",
         "@maven//:org_scala_lang_modules_scala_xml_3",
     ],
 )
 
 scala_binary(
     name = "cli",
-    tags = NO_LINT,
     srcs = glob(["cli/src/main/scala/**/*.scala"]),
     main_class = "org.scalablytyped.converter.cli.Main",
     scalacopts = SCALACOPTS,
+    tags = NO_LINT,
     deps = [
         ":importer",
         "@maven//:com_github_scopt_scopt_3",
