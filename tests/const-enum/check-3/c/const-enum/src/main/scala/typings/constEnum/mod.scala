@@ -39,6 +39,8 @@ object mod {
     inline def C: `1` = (0 + 1).asInstanceOf[`1`]
   }
   
+  type Foo3 = Foo2_
+  
   /* Rewritten from type alias, can be one of: 
     - typings.constEnum.constEnumInts.`1`
     - typings.constEnum.constEnumInts.`22`

@@ -36,6 +36,8 @@ object mod {
     inline def createChainedFunction(funcs: js.Function*): js.Function = ^.asInstanceOf[js.Dynamic].applyDynamic("createChainedFunction")(funcs.asInstanceOf[Seq[js.Any]]*).asInstanceOf[js.Function]
   }
   
+  type ButtonGroupProps = typingsSlinky.reactBootstrap.libButtonGroupMod.ButtonGroupProps
+  
   type Omit[T, K /* <: /* keyof T */ String */] = Pick[
     T, 
     /* import warning: importer.ImportType#apply Failed type conversion: {[ P in keyof T ]: P} & {[ P in K ]: never} & {[x: string] : never, [x: number] : never}[keyof T] */ js.Any
@@ -67,4 +69,6 @@ object mod {
     
     inline def xsmall: typingsSlinky.reactBootstrap.reactBootstrapStrings.xsmall = "xsmall".asInstanceOf[typingsSlinky.reactBootstrap.reactBootstrapStrings.xsmall]
   }
+  
+  type ToggleButtonGroupProps = typingsSlinky.reactBootstrap.libToggleButtonGroupMod.ToggleButtonGroupProps
 }

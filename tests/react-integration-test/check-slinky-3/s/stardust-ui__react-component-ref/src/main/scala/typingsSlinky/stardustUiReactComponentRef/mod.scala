@@ -5,7 +5,6 @@ import slinky.core.facade.ReactRef
 import typingsSlinky.stardustUiReactComponentRef.anon.Children
 import typingsSlinky.stardustUiReactComponentRef.anon.InnerRef
 import typingsSlinky.stardustUiReactComponentRef.distEsRefFindNodeMod.default
-import typingsSlinky.stardustUiReactComponentRef.distEsTypesMod.RefProps
 import org.scalablytyped.runtime.StObject
 import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSGlobalScope, JSGlobal, JSImport, JSName, JSBracketAccess}
@@ -18,7 +17,7 @@ object mod {
   
   @JSImport("@stardust-ui/react-component-ref", "Ref")
   @js.native
-  val Ref: ReactComponentClass[RefProps] = js.native
+  val Ref: ReactComponentClass[typingsSlinky.stardustUiReactComponentRef.distEsTypesMod.RefProps] = js.native
   
   @JSImport("@stardust-ui/react-component-ref", "RefFindNode")
   @js.native
@@ -80,4 +79,6 @@ object mod {
   
   /** Creates a React ref object from existing DOM node. */
   inline def toRefObject[T /* <: /* import warning: transforms.QualifyReferences#resolveTypeRef many Couldn't qualify Node */ Any */](node: T): ReactRef[T] = ^.asInstanceOf[js.Dynamic].applyDynamic("toRefObject")(node.asInstanceOf[js.Any]).asInstanceOf[ReactRef[T]]
+  
+  type RefProps = typingsSlinky.stardustUiReactComponentRef.distEsTypesMod.RefProps
 }

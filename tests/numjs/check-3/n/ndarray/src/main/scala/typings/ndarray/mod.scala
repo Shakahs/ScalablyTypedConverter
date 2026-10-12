@@ -18,6 +18,7 @@ object mod {
   @JSImport("ndarray", JSImport.Namespace)
   @js.native
   val ^ : js.Any = js.native
+  type ^[T] = typings.ndarray.mod.ndarray[T]
   
   type Data[T] = js.Array[T]
   

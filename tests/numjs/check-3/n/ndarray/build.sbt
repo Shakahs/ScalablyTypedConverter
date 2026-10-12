@@ -1,6 +1,6 @@
 organization := "org.scalablytyped"
 name := "ndarray"
-version := "0.0-unknown-285a03"
+version := "0.0-unknown-baadab"
 scalaVersion := "3.9.0"
 enablePlugins(ScalaJSPlugin)
 libraryDependencies ++= Seq(
