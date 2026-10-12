@@ -54,6 +54,7 @@ trait ImporterTest extends AnyFunSuite with ImporterHarness with ParallelTestExe
   test("cldrjs")(assertImportsOk("cldrjs", pedantic                                 = true))
   test("void-elements")(assertImportsOk("void-elements", pedantic                   = true))
   test("type-mappings")(assertImportsOk("type-mappings", pedantic                   = true))
+  test("conditional-type-cycle")(assertImportsOk("conditional-type-cycle", pedantic = true))
   test("documentation")(assertImportsOk("documentation", pedantic                   = true))
   test("swiz")(assertImportsOk("swiz", pedantic                                     = true))
   test("defaulted-tparams")(assertImportsOk("defaulted-tparams", pedantic           = true))

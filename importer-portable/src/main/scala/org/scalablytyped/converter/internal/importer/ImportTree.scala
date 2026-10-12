@@ -296,15 +296,33 @@ class ImportTree(
                 case _ =>
                   val referencesInferred = TsTreeTraverse.collect(aliased) {
                     case tr: TsTypeRef if inferred.contains(tr) => tr
-                    // break recursion by referencing back to initial type alias (the depth check is more through)
-                    case tr: TsTypeRef if tr.name == codePath.forceHasPath.codePath => tr
                   }
-                  referencesInferred match {
-                    case Empty => IArray(aliased)
-                    case _     => Empty
-                  }
+                  if (referencesInferred.isEmpty && !leadsBackToSelf(aliased)) IArray(aliased) else Empty
               }
           }
+
+        /**
+          * Whether `tpe` refers back to this type alias, directly or through the type aliases it names.
+          * Scala rejects a type alias whose expansion reaches itself, and each conditional type is
+          * approximated on its own, so a candidate which leads back here would become a cyclic alias.
+          */
+        def leadsBackToSelf(tpe: TsType): Boolean = {
+          val self    = codePath.forceHasPath.codePath
+          val visited = scala.collection.mutable.Set.empty[TsQIdent]
+
+          def go(scope: TsTreeScope, tpe: TsType): Boolean =
+            TsTreeTraverse.collect(tpe) { case tr: TsTypeRef => tr }.exists { tr =>
+              def throughAlias =
+                scope.lookupTypeIncludeScope(tr.name, skipValidation = true).exists {
+                  case (ta: TsDeclTypeAlias, aliasScope) => go(aliasScope, ta.alias)
+                  case _                                 => false
+                }
+
+              tr.name == self || (visited.add(tr.name) && throughAlias)
+            }
+
+          go(scope, tpe)
+        }
 
         val approximationCandidates = findCandidates(tpe, depth = 0, inferred = Empty)
 
