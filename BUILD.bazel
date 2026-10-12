@@ -186,6 +186,7 @@ scala_library(
     deps = [
         ":importer_portable",
         "@maven//:io_get_coursier_coursier_2_13",
+        "@maven//:io_get_coursier_coursier_archive_cache_2_13",
         "@maven//:io_get_coursier_coursier_util_2_13",
         "@maven//:org_scala_lang_modules_scala_xml_3",
     ],

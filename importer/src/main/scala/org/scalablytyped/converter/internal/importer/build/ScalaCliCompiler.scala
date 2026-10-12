@@ -247,7 +247,7 @@ object ScalaCliCompiler {
     }
 
     // Use ArchiveCache which automatically handles decompression
-    ArchiveCache[Task]()
+    ArchiveCache()
       .withCache(FileCache[Task]().withLogger(CacheLogger.nop))
       .get(Artifact(artifactUrl))
       .value(ec)

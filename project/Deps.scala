@@ -9,7 +9,8 @@ object Deps {
   val fansi             = "com.lihaoyi" %% "fansi" % "0.5.1"
   val scalaXml          = "org.scala-lang.modules" %% "scala-xml" % "2.4.0"
   val scopt             = "com.github.scopt" %% "scopt" % "4.1.0"
-  val coursier          = "io.get-coursier" %% "coursier" % "2.1.24"
+  val coursier          = "io.get-coursier" %% "coursier" % "2.1.26"
+  val coursierArchive   = "io.get-coursier" %% "coursier-archive-cache" % "2.1.26"
   val ox                = "com.softwaremill.ox" %% "core" % "1.0.7"
 
   val circe: Seq[ModuleID] =

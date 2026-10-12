@@ -84,6 +84,7 @@ lazy val importer = project
   .settings(
     libraryDependencies ++= Seq(
       Deps.coursier.cross(CrossVersion.for3Use2_13).exclude("org.scala-lang.modules", "scala-xml_2.13"),
+      Deps.coursierArchive.cross(CrossVersion.for3Use2_13),
       Deps.scalaXml,
       Deps.scalatest % Test,
     ),
