@@ -7,3 +7,5 @@ target/
 .DS_Store
 release-temp/
 .bsp/
+# Written into the working directory by the parent workspace's --execution_log_compact_file
+execution_log.binpb.zst
