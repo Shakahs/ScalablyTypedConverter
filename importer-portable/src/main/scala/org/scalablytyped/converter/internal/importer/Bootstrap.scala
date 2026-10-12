@@ -180,7 +180,10 @@ object Bootstrap {
   ): Either[Unresolved, Vector[LibTsSource]] =
     libs.toVector
       .map(libraryResolver.library)
-      .partitionCollect2({ case LibraryResolver.Found(x) => x }, { case LibraryResolver.NotAvailable(name) => name }) match {
+      .partitionCollect2[LibTsSource, TsIdentLibrary, Array](
+        { case LibraryResolver.Found(x) => x },
+        { case LibraryResolver.NotAvailable(name) => name },
+      ) match {
       case (allFound, notAvailable, _) if notAvailable.isEmpty => Right(allFound.toVector)
       case (_, notAvailable, _)                                => Left(Unresolved(notAvailable.toVector))
     }
