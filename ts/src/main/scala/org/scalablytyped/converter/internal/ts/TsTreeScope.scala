@@ -131,8 +131,17 @@ sealed trait TsTreeScope {
 
   override def equals(obj: Any): Boolean =
     obj match {
-      case that: TsTreeScope if root.libName === that.root.libName && hashCode === that.hashCode => stack === that.stack
+      case that: TsTreeScope if root.libName === that.root.libName && hashCode === that.hashCode =>
+        sameTrees(stack, that.stack)
       case _ => false
+    }
+
+  /* the same tree instances, in the same order */
+  private def sameTrees(one: List[TsTree], two: List[TsTree]): Boolean =
+    (one, two) match {
+      case (Nil, Nil)           => true
+      case (h1 :: t1, h2 :: t2) => (h1 eq h2) && sameTrees(t1, t2)
+      case _                    => false
     }
 }
 
@@ -280,16 +289,10 @@ object TsTreeScope {
       extends TsTreeScope
       with HasStableHash {
 
-    // lazy val with no locking
-    private var hasHash = false
-    private var hash: Int = _
-    override def hashCode: Int = {
-      if (!hasHash) {
-        hasHash = true
-        hash    = StableHash((outer, current))
-      }
-      hash
-    }
+    /* Identifies the scope by the tree instances on its stack rather than by their contents: hashing `current` by
+     * content walks the whole subtree, and a scope over a file is created for every lookup in it. The hash only keys
+     * in-memory caches and the loop detector, so it need not be stable between runs. */
+    override val hashCode: Int = 31 * outer.hashCode + System.identityHashCode(current)
 
     var _stack: List[TsTree] = null
     override def stack = {

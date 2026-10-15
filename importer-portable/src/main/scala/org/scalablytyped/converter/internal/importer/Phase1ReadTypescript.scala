@@ -125,7 +125,7 @@ class Phase1ReadTypescript(
     source match {
       case source if ignored(source.libName) || isCircular => PhaseRes.Ignore()
       case source =>
-        val includedFiles: IArray[InFile] =
+        val (includedFiles, listMs) = timed[IArray[InFile]] {
           source match {
             case LibTsSource.StdLibSource(_, files, _) =>
               PathsFromTsLibSource.filesFrom(files.head.folder)
@@ -142,6 +142,8 @@ class Phase1ReadTypescript(
                 PathsFromTsLibSource.filesFrom(bound)
               else PathsFromTsLibSource.filesFrom(f.folder)
           }
+        }
+        logger.warn(s"listed ${includedFiles.length} files in $listMs ms")
 
         val (parsedFiles, parseMs) = timed {
           /* For the stdlib only the files the wanted `lib.*.d.ts` pull in are preprocessed, not every
@@ -298,20 +300,24 @@ class Phase1ReadTypescript(
           return PhaseRes.Ignore()
         }
 
-        val flattened     = FlattenTrees(preparedFiles.map(_._1))
+        val (flattened, flattenMs) = timed(FlattenTrees(preparedFiles.map(_._1)))
+        logger.warn(s"flattened ${preparedFiles.length} files in $flattenMs ms")
         val depsFromFiles = preparedFiles.foldLeft(Set.empty[LibTsSource]) { case (acc, (_, deps)) => acc ++ deps }
 
-        val withExportedModules = source.packageJsonOpt.flatMap(_.parsedExported).foldLeft(flattened) {
-          case (file, exports) =>
-            val proxyModules = ProxyModule.fromExports(
-              source,
-              logger,
-              resolve,
-              existing = file.membersByName.contains,
-              exports,
-            )
-            file.copy(members = IArray.fromTraversable(proxyModules).map(_.asModule) ++ file.members)
+        val (withExportedModules, exportsMs) = timed {
+          source.packageJsonOpt.flatMap(_.parsedExported).foldLeft(flattened) {
+            case (file, exports) =>
+              val proxyModules = ProxyModule.fromExports(
+                source,
+                logger,
+                resolve,
+                existing = file.membersByName.contains,
+                exports,
+              )
+              file.copy(members = IArray.fromTraversable(proxyModules).map(_.asModule) ++ file.members)
+          }
         }
+        logger.warn(s"added exported modules in $exportsMs ms")
 
         val withFilteredModules: TsParsedFile =
           if (ignoredModulePrefixes.nonEmpty)
@@ -325,7 +331,7 @@ class Phase1ReadTypescript(
         val stdlibSourceOpt: Option[LibTsSource] =
           if (includedFiles.exists(_.path === resolve.stdLib.path)) None else Option(resolve.stdLib)
 
-        val depsDeclared: SortedSet[LibTsSource] =
+        val (depsDeclared, declaredMs) = timed[SortedSet[LibTsSource]] {
           if (stdlibSourceOpt.isEmpty) SortedSet.empty
           else
             source.packageJsonOpt.getOrElse(PackageJson.Empty).allLibs(dev = false, peer = true).keySet.flatMap {
@@ -340,18 +346,27 @@ class Phase1ReadTypescript(
                     None
                 }
             }
+        }
+        logger.warn(s"resolved declared dependencies in $declaredMs ms")
 
-        getDeps(depsDeclared ++ stdlibSourceOpt ++ depsFromFiles).map { deps =>
-          val transitiveDeps = deps.foldLeft(deps) {
-            case (acc, (_, lib)) => acc ++ lib.transitiveDependencies
+        val (linkedDeps, linkMs) = timed(getDeps(depsDeclared ++ stdlibSourceOpt ++ depsFromFiles))
+        logger.warn(s"linked dependencies in $linkMs ms")
+
+        linkedDeps.map { deps =>
+          val ((transitiveDeps, scope), scopeMs) = timed {
+            val transitiveDeps = deps.foldLeft(deps) {
+              case (acc, (_, lib)) => acc ++ lib.transitiveDependencies
+            }
+            val scope: TsTreeScope.Root =
+              TsTreeScope(
+                source.libName,
+                pedantic,
+                transitiveDeps.map { case (source, lib) => source -> lib.parsed },
+                logger,
+              )
+            (transitiveDeps, scope)
           }
-          val scope: TsTreeScope.Root =
-            TsTreeScope(
-              source.libName,
-              pedantic,
-              transitiveDeps.map { case (source, lib) => source -> lib.parsed },
-              logger,
-            )
+          logger.warn(s"built the scope over ${transitiveDeps.size} dependencies in $scopeMs ms")
 
           val involvesReact = {
             val react = TsIdentLibrarySimple("react")
@@ -372,12 +387,15 @@ class Phase1ReadTypescript(
           }
           logger.warn(s"typescript transforms took $transformMs ms")
 
-          val version = calculateLibraryVersion(
-            source.folder,
-            source.isInstanceOf[LibTsSource.StdLibSource],
-            source.packageJsonOpt,
-            finished.comments,
-          )
+          val (version, versionMs) = timed {
+            calculateLibraryVersion(
+              source.folder,
+              source.isInstanceOf[LibTsSource.StdLibSource],
+              source.packageJsonOpt,
+              finished.comments,
+            )
+          }
+          logger.warn(s"calculated the version in $versionMs ms")
 
           LibTs(source)(version, finished, deps)
         }

@@ -4,10 +4,14 @@ package flavours
 
 import org.scalablytyped.converter.internal.scalajs.ExprTree._
 
+/**
+  * The builder every generated component returns: the three arguments of `React.createElement`, each with its own
+  * type, which `build` creates the element from.
+  *
+  * The fields are prefixed so they don't collide with the setter a component generates for each of its props, which
+  * are named after the props (`component`, `props` and `children` among them).
+  */
 class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Versions.Scala) {
-
-  /** Need to disable this on 2.12 because it cannot represent universal traits with `this` types */
-  val enableAnyVal = if (scalaVersion.binVersion <= "2.12") None else Some(TypeRef.AnyVal)
 
   val StBuildingComponent = Name("StBuildingComponent")
   val builderCp           = QualifiedName(IArray(outputPkg, StBuildingComponent))
@@ -15,11 +19,13 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
   val builderTparams      = IArray(R)
   val builderRef          = TypeRef(builderCp, TypeParamTree.asTypeArgs(builderTparams), NoComments)
   val modParam            = ParamTree(Name("m"), false, false, TypeRef(JapgollyNames.vdom.TagMod), NotImplemented, NoComments)
-  val jsAnyParam          = ParamTree(Name("m"), false, false, TypeRef.Any, NotImplemented, NoComments)
+  val propsParam          = ParamTree(Name("m"), false, false, TypeRef.JsObject, NotImplemented, NoComments)
 
-  //  def args: js.Array[js.Any]
-  val args: MethodTree = {
-    val name: Name = Name("args")
+  val ElementType = TypeRef(JapgollyNames.rawReact.ElementType)
+  val ReactNode   = TypeRef(JapgollyNames.rawReact.Node)
+  val Children    = TypeRef(QualifiedName.JsArray, IArray(ReactNode), NoComments)
+
+  private def field(name: Name, tpe: TypeRef): MethodTree =
     MethodTree(
       Empty,
       ProtectionLevel.Public,
@@ -27,31 +33,49 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
       Empty,
       Empty,
       NotImplemented,
-      TypeRef(QualifiedName.JsArray, IArray(TypeRef.Any), NoComments),
+      tpe,
       isOverride = false,
       comments   = NoComments,
       codePath   = builderCp + name,
       isImplicit = false,
     )
-  }
+
+  //  def stElementType: React.ElementType
+  val elementType: MethodTree = field(Name("stElementType"), ElementType)
+  //  def stProps: js.Object
+  val props: MethodTree = field(Name("stProps"), TypeRef.JsObject)
+  //  def stChildren: js.Array[React.Node]
+  val children: MethodTree = field(Name("stChildren"), Children)
+
+  /** The parameters a builder is constructed with, one for each field; it starts without children. */
+  val ctorParams: IArray[ParamTree] =
+    IArray(
+      ParamTree(elementType.name, isImplicit = false, isVal = true, ElementType, NotImplemented, NoComments),
+      ParamTree(props.name, isImplicit = false, isVal = true, TypeRef.JsObject, NotImplemented, NoComments),
+      ParamTree(
+        children.name,
+        isImplicit = false,
+        isVal      = true,
+        Children,
+        Call(Ref(QualifiedName.JsArray), IArray(Empty)),
+        NoComments,
+      ),
+    )
 
   //  @inline final def set(key: String, value: js.Any): this.type = {
-  //    args(1).asInstanceOf[js.Dynamic].updateDynamic(key)(value)
+  //    stProps.asInstanceOf[js.Dynamic].updateDynamic(key)(value)
   //    this
   //  }
   val set: MethodTree = {
     val keyParam =
       ParamTree(Name("key"), isImplicit = false, isVal = false, TypeRef.String, NotImplemented, NoComments)
     val valueParam =
-      ParamTree(Name("value"), isImplicit = false, isVal = false, TypeRef.Any, NotImplemented, NoComments)
+      ParamTree(Name("value"), isImplicit = false, isVal = false, TypeRef.JsAny, NotImplemented, NoComments)
 
     val impl = Block(
       Call(
-        Select(
-          AsInstanceOf(Call(Ref(args.name), IArray(IArray(IntLit("1")))), TypeRef.JsDynamic),
-          Name("updateDynamic"),
-        ),
-        IArray(IArray(Ref(keyParam.name)), IArray(AsInstanceOf(Ref(valueParam.name), TypeRef.JsAny))),
+        Select(AsInstanceOf(Ref(props.name), TypeRef.JsDynamic), Name("updateDynamic")),
+        IArray(IArray(Ref(keyParam.name)), IArray(Ref(valueParam.name))),
       ),
       Ref(QualifiedName.THIS),
     )
@@ -72,62 +96,13 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
     )
   }
 
-  //  @inline final def withComponent(f: js.Any => js.Any): this.type = {
-  //    args.update(0, f(args(0))
-  //    this
-  //  }
-  val withComponent: MethodTree = {
-    val fParam =
-      ParamTree(
-        Name("f"),
-        isImplicit = false,
-        isVal      = false,
-        TypeRef.ScalaFunction(IArray(TypeRef.Any), TypeRef.Any, NoComments),
-        NotImplemented,
-        NoComments,
-      )
-
-    val impl = Block(
-      Call(
-        Select(Ref(args.name), Name("update")),
-        IArray(
-          IArray(
-            IntLit("0"),
-            Call(Ref(fParam.name), IArray(IArray(Call(Ref(args.name), IArray(IArray(IntLit("0"))))))),
-          ),
-        ),
-      ),
-      Ref(QualifiedName.THIS),
-    )
-    val name: Name = Name("withComponent")
-
-    MethodTree(
-      IArray(Annotation.Inline),
-      ProtectionLevel.Public,
-      name,
-      Empty,
-      IArray(IArray(fParam)),
-      impl,
-      TypeRef(QualifiedName.THIS),
-      isOverride = false,
-      NoComments,
-      builderCp + name,
-      isImplicit = false,
-    )
-  }
-
   val Trait: ClassTree = {
     val unsafeSpread = {
-      val param = ParamTree(Name("obj"), false, false, TypeRef.Any, NotImplemented, NoComments)
+      val param = ParamTree(Name("obj"), false, false, TypeRef.JsObject, NotImplemented, NoComments)
       val name  = Name("unsafeSpread")
       val assign = Call(
         Ref(QualifiedName.JsObject + Name("assign")),
-        IArray(
-          IArray(
-            AsInstanceOf(Call(Ref(args.name), IArray(IArray(IntLit("1")))), TypeRef.JsObject),
-            AsInstanceOf(Ref(param.name), TypeRef.JsObject),
-          ),
-        ),
+        IArray(IArray(Ref(props.name), Ref(param.name))),
       )
 
       MethodTree(
@@ -174,19 +149,18 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
 //        tt.mods.foreach((m: TagMod) => applyTagMod(m))
 //      } else if (t.isInstanceOf[VdomNode]) {
 //        val tt = t.asInstanceOf[VdomNode]
-//        b.args.push(tt.rawNode.asInstanceOf[js.Any])
+//        stChildren.push(tt.rawNode)
 //      } else {
 //        val tt = t.toJs
 //        tt.addClassNameToProps()
 //        tt.addKeyToProps()
 //        tt.addStyleToProps()
-//        tt.nonEmptyChildren.foreach((children: js.Array[Node]) => b.args.push(children))
-//        tt.nonEmptyProps.foreach((m: js.Any) => unsafeSpread(m))
+//        tt.nonEmptyChildren.foreach((children: js.Array[Node]) => stChildren.push(children.toSeq*))
+//        tt.nonEmptyProps.foreach((m: js.Object) => unsafeSpread(m))
 //      }
     val applyTagMod = {
       val TagMod          = TypeRef(JapgollyNames.vdom.TagMod)
       val VdomNode        = TypeRef(JapgollyNames.vdom.VdomNode)
-      val ReactNode       = TypeRef(JapgollyNames.rawReact.Node)
       val TagModComposite = TypeRef(JapgollyNames.vdom.TagMod + Name("Composite"))
 
       val tParam = ParamTree(Name("t"), false, false, TagMod, NotImplemented, NoComments)
@@ -195,18 +169,10 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
         val ttName = Name("tt")
         val fallback = {
           val childrenName = Name("children")
+          /* each child its own argument, as scalajs-react passes a tag's children */
           val childrenLambda = Lambda(
-            IArray(
-              ParamTree(
-                childrenName,
-                false,
-                false,
-                TypeRef(QualifiedName.JsArray, IArray(ReactNode), NoComments),
-                NotImplemented,
-                NoComments,
-              ),
-            ),
-            Call(Select(Ref(args.name), Name("push")), IArray(IArray(Ref(childrenName)))),
+            IArray(ParamTree(childrenName, false, false, Children, NotImplemented, NoComments)),
+            Call(Select(Ref(children.name), Name("push")), IArray(IArray(`:_*`(Ref(childrenName).select("toSeq"))))),
           )
           Block(
             Val(ttName, Select(Ref(tParam.name), Name("toJs"))),
@@ -220,7 +186,7 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
             Call(
               Ref(QualifiedName(IArray(ttName, Name("nonEmptyProps"), Name("foreach")))),
               IArray(
-                IArray(Lambda(IArray(jsAnyParam), Call(Ref(unsafeSpread.name), IArray(IArray(Ref(modParam.name)))))),
+                IArray(Lambda(IArray(propsParam), Call(Ref(unsafeSpread.name), IArray(IArray(Ref(propsParam.name)))))),
               ),
             ),
           )
@@ -241,8 +207,8 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
               Block(
                 Val(ttName, AsInstanceOf(Ref(tParam.name), VdomNode)),
                 Call(
-                  Select(Ref(args.name), Name("push")),
-                  IArray(IArray(AsInstanceOf(Select(Ref(ttName), Name("rawNode")), TypeRef.JsAny))),
+                  Select(Ref(children.name), Name("push")),
+                  IArray(IArray(Select(Ref(ttName), Name("rawNode")))),
                 ),
               ),
               Some(fallback),
@@ -305,8 +271,8 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
     }
 
 //    @scala.inline
-//    def apply(children: japgolly.scalajs.react.PropsChildren): this.type = {
-//      args.push(children.raw)
+//    def children(children: japgolly.scalajs.react.PropsChildren): this.type = {
+//      stChildren.push(children.raw)
 //      this
 //    }
     val applyChildren = {
@@ -321,7 +287,7 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
       val impl =
         Block(
           Call(
-            Ref(args.name).select("push"),
+            Ref(children.name).select("push"),
             IArray(IArray(Ref(childrenParam.name).select("raw"))),
           ),
           Ref(Name.THIS),
@@ -422,12 +388,13 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
       level       = ProtectionLevel.Public,
       name        = StBuildingComponent,
       tparams     = builderTparams,
-      parents     = IArray.fromOption(enableAnyVal.map(_ => TypeRef.Any)),
+      parents     = Empty,
       ctors       = Empty,
       members = IArray(
-        args,
+        elementType,
+        props,
+        children,
         set,
-        withComponent,
         unsafeSpread,
         build,
         applyTagMod,
@@ -445,20 +412,7 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
   }
 
   lazy val Default: ClassTree = {
-    val ctor = CtorTree(
-      ProtectionLevel.Public,
-      IArray(
-        ParamTree(
-          Name("args"),
-          isImplicit = false,
-          isVal      = true,
-          TypeRef(QualifiedName.JsArray, IArray(TypeRef.Any), NoComments),
-          NotImplemented,
-          NoComments,
-        ),
-      ),
-      NoComments,
-    )
+    val ctor = CtorTree(ProtectionLevel.Public, ctorParams, NoComments)
 
     val name = Name("Default")
     ClassTree(
@@ -467,7 +421,7 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
       level       = ProtectionLevel.Public,
       name        = name,
       tparams     = builderTparams,
-      parents     = IArray.fromOption(enableAnyVal) ++ IArray(builderRef),
+      parents     = IArray(builderRef),
       ctors       = IArray(ctor),
       members     = Empty,
       classType   = ClassType.Class,
@@ -487,16 +441,25 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
       val name          = Name("ReactRaw")
       val ReactRawCp    = builderCp + name
       val createElement = Name("createElement")
-      val createElementField = FieldTree(
+      //  def createElement(elementType: React.ElementType, props: js.Object, children: React.Node*): React.Element
+      val createElementMethod = MethodTree(
         annotations = Empty,
         level       = ProtectionLevel.Public,
         name        = createElement,
-        tpe         = TypeRef.JsDynamic,
-        impl        = ExprTree.native,
-        isReadOnly  = true,
-        isOverride  = false,
-        comments    = NoComments,
-        codePath    = ReactRawCp + createElement,
+        tparams     = Empty,
+        params = IArray(
+          IArray(
+            ParamTree(Name("elementType"), false, false, ElementType, NotImplemented, NoComments),
+            ParamTree(Name("props"), false, false, TypeRef.JsObject, NotImplemented, NoComments),
+            ParamTree(Name("children"), false, false, TypeRef.Repeated(ReactNode, NoComments), NotImplemented, NoComments),
+          ),
+        ),
+        impl       = ExprTree.native,
+        resultType = TypeRef(JapgollyNames.rawReact.Element),
+        isOverride = false,
+        comments   = NoComments,
+        codePath   = ReactRawCp + createElement,
+        isImplicit = false,
       )
       ModuleTree(
         IArray(
@@ -506,66 +469,37 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
         ProtectionLevel.Public,
         name,
         IArray(TypeRef.JsObject),
-        IArray(createElementField),
+        IArray(createElementMethod),
         Minimization.KeepMarker + Marker.ManglerLeaveAlone,
         ReactRawCp,
         isOverride = false,
       )
     }
-//    @inline implicit def make(comp: StBuildingComponent[_]): japgolly.scalajs.react.vdom.VdomElement = {
-//      if (comp.args(0) == null) {
-//        throw new IllegalStateException(
-//          "This component has already been built into a ReactElement, and cannot be reused"
-//        )
-//      }
-//      val ret = ReactRaw.createElement
-//        .applyDynamic("apply")(ReactRaw, comp.args)
-//        .asInstanceOf[japgolly.scalajs.react.raw.React.Element]
+//    @inline implicit def make[R <: js.Object](comp: StBuildingComponent[R]): japgolly.scalajs.react.vdom.VdomElement =
+//      japgolly.scalajs.react.vdom.VdomElement(ReactRaw.createElement(comp.stElementType, comp.stProps, comp.stChildren.toSeq*))
 //
-//      comp.args.update(0, null)
-//      japgolly.scalajs.react.vdom.VdomElement(ret)
-//    }
+// createElement copies the props and children it is given, so the builder can be built again.
     val make: MethodTree = {
-      val compParam          = ParamTree(Name("comp"), false, false, builderRef, NotImplemented, NoComments)
-      val name               = Name("make")
-      val compArgs           = Select(Ref(compParam.name), Name("args"))
-      val args0              = Call(compArgs, IArray(IArray(IntLit("0"))))
-      val reactRawName       = Ref(ReactRaw.name)
-      val createElementApply = reactRawName.select("createElement", "applyDynamic")
-      val ret                = Name("ret")
+      val compParam = ParamTree(Name("comp"), false, false, builderRef, NotImplemented, NoComments)
+      val name      = Name("make")
+      val comp      = Ref(compParam.name)
 
-      def inDevMode(expr: ExprTree) =
-        If(
-          Unary(
-            "!",
-            Ref(QualifiedName.scala_scalajs).select("LinkingInfo", "productionMode"),
-          ),
-          Block(expr),
-          None,
-        )
-
-      val impl = Block(
-        inDevMode(
-          If(
-            BinaryOp(args0, "==", Null),
-            Throw(
-              New(
-                TypeRef(QualifiedName("java.lang.IllegalStateException")),
-                IArray(StringLit("This component has already been built into a ReactElement, and cannot be reused")),
+      val impl = Call(
+        Ref(JapgollyNames.vdom.ReactElement),
+        IArray(
+          IArray(
+            Call(
+              Ref(ReactRaw.name).select("createElement"),
+              IArray(
+                IArray(
+                  Select(comp, elementType.name),
+                  Select(comp, props.name),
+                  `:_*`(Select(comp, children.name).select("toSeq")),
+                ),
               ),
             ),
-            None,
           ),
         ),
-        Val(
-          ret,
-          AsInstanceOf(
-            Call(createElementApply, IArray(IArray(StringLit("apply")), IArray(reactRawName, compArgs))),
-            TypeRef(JapgollyNames.rawReact.Element),
-          ),
-        ),
-        inDevMode(Call(Select(compArgs, Name("update")), IArray(IArray(IntLit("0"), Null)))),
-        Call(Ref(JapgollyNames.vdom.ReactElement), IArray(IArray(Ref(ret)))),
       )
 
       MethodTree(

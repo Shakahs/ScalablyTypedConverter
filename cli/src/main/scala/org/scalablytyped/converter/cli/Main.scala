@@ -325,7 +325,11 @@ object Main {
               "scala.js",
             )
             .next(
-              new PhaseFlavour(conversion.flavourImpl, maybePrivateWithin = conversion.privateWithin),
+              new PhaseFlavour(
+                conversion.flavourImpl,
+                maybePrivateWithin = conversion.privateWithin,
+                scalaVersion       = conversion.versions.scala,
+              ),
               conversion.flavourImpl.toString,
             )
 

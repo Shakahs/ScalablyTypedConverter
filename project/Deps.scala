@@ -12,6 +12,7 @@ object Deps {
   val coursier          = "io.get-coursier" %% "coursier" % "2.1.26"
   val coursierArchive   = "io.get-coursier" %% "coursier-archive-cache" % "2.1.26"
   val ox                = "com.softwaremill.ox" %% "core" % "1.0.7"
+  val kryo              = "com.esotericsoftware" % "kryo" % "5.7.1"
 
   val circe: Seq[ModuleID] =
     Seq(

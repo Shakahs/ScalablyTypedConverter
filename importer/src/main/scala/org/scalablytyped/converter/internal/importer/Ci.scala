@@ -282,7 +282,11 @@ class Ci(config: Ci.Config, paths: Ci.Paths, pool: ForkJoinPool, ec: ExecutionCo
           "scala.js",
         )
         .next(
-          new PhaseFlavour(config.conversion.flavourImpl, maybePrivateWithin = config.conversion.privateWithin),
+          new PhaseFlavour(
+            config.conversion.flavourImpl,
+            maybePrivateWithin = config.conversion.privateWithin,
+            scalaVersion       = config.conversion.versions.scala,
+          ),
           config.conversion.flavourImpl.toString,
         )
         .next(

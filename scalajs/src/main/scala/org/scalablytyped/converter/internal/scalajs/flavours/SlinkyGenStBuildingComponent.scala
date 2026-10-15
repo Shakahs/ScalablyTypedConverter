@@ -28,7 +28,7 @@ class SlinkyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Versio
       Empty,
       Empty,
       NotImplemented,
-      TypeRef(QualifiedName.JsArray, IArray(TypeRef.Any), NoComments),
+      TypeRef(QualifiedName.JsArray, IArray(TypeRef.JsAny), NoComments),
       isOverride = false,
       comments   = NoComments,
       codePath   = builderCp + name,
@@ -44,7 +44,7 @@ class SlinkyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Versio
     val keyParam =
       ParamTree(Name("key"), isImplicit = false, isVal = false, TypeRef.String, NotImplemented, NoComments)
     val valueParam =
-      ParamTree(Name("value"), isImplicit = false, isVal = false, TypeRef.Any, NotImplemented, NoComments)
+      ParamTree(Name("value"), isImplicit = false, isVal = false, TypeRef.JsAny, NotImplemented, NoComments)
 
     val impl = Block(
       Call(
@@ -83,7 +83,7 @@ class SlinkyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Versio
         Name("f"),
         isImplicit = false,
         isVal      = false,
-        TypeRef.ScalaFunction(IArray(TypeRef.Any), TypeRef.Any, NoComments),
+        TypeRef.ScalaFunction(IArray(TypeRef.JsAny), TypeRef.JsAny, NoComments),
         NotImplemented,
         NoComments,
       )
@@ -141,7 +141,7 @@ class SlinkyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Versio
     }
 
     val unsafeSpread = {
-      val param = ParamTree(Name("obj"), false, false, TypeRef.Any, NotImplemented, NoComments)
+      val param = ParamTree(Name("obj"), false, false, TypeRef.JsAny, NotImplemented, NoComments)
       val name  = Name("unsafeSpread")
       val assign = Call(
         Ref(QualifiedName.JsObject + Name("assign")),
@@ -228,7 +228,7 @@ class SlinkyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Versio
               If(
                 IsInstanceOf(modRef, OptionalAttrPair),
                 ifIsOptionalAttrPair,
-                Some(Call(Select(Ref(args.name), Name("push")), IArray(IArray(modRef)))),
+                Some(Call(Select(Ref(args.name), Name("push")), IArray(IArray(AsInstanceOf(modRef, TypeRef.JsAny))))),
               ),
             ),
           ),
@@ -337,7 +337,7 @@ class SlinkyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Versio
           Name("args"),
           isImplicit = false,
           isVal      = true,
-          TypeRef(QualifiedName.JsArray, IArray(TypeRef.Any), NoComments),
+          TypeRef(QualifiedName.JsArray, IArray(TypeRef.JsAny), NoComments),
           NotImplemented,
           NoComments,
         ),

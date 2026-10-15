@@ -817,7 +817,7 @@ class SlinkyGenComponents(
           Name("args"),
           isImplicit = false,
           isVal      = true,
-          TypeRef(QualifiedName.JsArray, IArray(TypeRef.Any), NoComments),
+          TypeRef(QualifiedName.JsArray, IArray(TypeRef.JsAny), NoComments),
           NotImplemented,
           NoComments,
         ),

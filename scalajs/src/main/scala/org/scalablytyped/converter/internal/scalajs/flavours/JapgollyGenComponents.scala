@@ -478,15 +478,8 @@ class JapgollyGenComponents(
         val newed = New(
           builderRef,
           IArray(
-            Call(
-              Ref(QualifiedName.JsArray),
-              IArray(
-                IArray(
-                  Ref(QualifiedName(IArray(Name.THIS, names.component))),
-                  AsInstanceOf(Ref(QualifiedName(IArray(objName))), propsRef.ref),
-                ),
-              ),
-            ),
+            Ref(QualifiedName(IArray(Name.THIS, names.component))),
+            AsInstanceOf(Ref(QualifiedName(IArray(objName))), TypeRef.JsObject),
           ),
         )
 
@@ -541,15 +534,8 @@ class JapgollyGenComponents(
           val newed = New(
             builderRef,
             IArray(
-              Call(
-                Ref(QualifiedName.JsArray),
-                IArray(
-                  IArray(
-                    Ref(QualifiedName(IArray(Name.THIS, names.component))),
-                    Select(Ref(QualifiedName.JsDictionary), Name("empty")),
-                  ),
-                ),
-              ),
+              Ref(QualifiedName(IArray(Name.THIS, names.component))),
+              New(TypeRef.JsObject, Empty),
             ),
           )
           Call(newed, IArray(IArray()))
@@ -593,15 +579,8 @@ class JapgollyGenComponents(
       New(
         builderRef,
         IArray(
-          Call(
-            Ref(QualifiedName.JsArray),
-            IArray(
-              IArray(
-                Ref(QualifiedName(IArray(Name.THIS, names.component))),
-                AsInstanceOf(Ref(param.name), TypeRef.JsAny),
-              ),
-            ),
-          ),
+          Ref(QualifiedName(IArray(Name.THIS, names.component))),
+          AsInstanceOf(Ref(param.name), TypeRef.JsObject),
         ),
       )
     }
@@ -639,7 +618,7 @@ class JapgollyGenComponents(
           annotations = IArray(Annotation.JsNative, location),
           level       = ProtectionLevel.Public,
           name        = names.component,
-          tpe         = TypeRef.JsObject,
+          tpe         = genStBuilder.ElementType,
           impl        = ExprTree.native,
           isReadOnly  = true,
           isOverride  = false,
@@ -660,11 +639,11 @@ class JapgollyGenComponents(
     val members: IArray[MethodTree] =
       props.flatMap {
         case Prop.CompressedProp(name, tpe, asExpr, isRequired) =>
-          val args1 = Call(Ref(genStBuilder.args.name), IArray(IArray(IntLit("1"))))
+          val props = Ref(genStBuilder.props.name)
 
           val (default, update) =
-            if (isRequired) (NotImplemented, asExpr(args1))
-            else (Null, If(BinaryOp(Ref(name), "!=", Null), asExpr(args1), None))
+            if (isRequired) (NotImplemented, asExpr(props))
+            else (Null, If(BinaryOp(Ref(name), "!=", Null), asExpr(props), None))
 
           val impl = Block(update, Ref(QualifiedName.THIS))
 
@@ -750,20 +729,7 @@ class JapgollyGenComponents(
         case _ => Empty
       }
 
-    def ctor = CtorTree(
-      ProtectionLevel.Public,
-      IArray(
-        ParamTree(
-          Name("args"),
-          isImplicit = false,
-          isVal      = true,
-          TypeRef(QualifiedName.JsArray, IArray(TypeRef.Any), NoComments),
-          NotImplemented,
-          NoComments,
-        ),
-      ),
-      NoComments,
-    )
+    def ctor = CtorTree(ProtectionLevel.Public, genStBuilder.ctorParams, NoComments)
 
     if (members.isEmpty && tparams.isEmpty) None
     else {
@@ -774,7 +740,7 @@ class JapgollyGenComponents(
           level       = ProtectionLevel.Public,
           name        = name,
           tparams     = tparams,
-          parents     = IArray.fromOption(genStBuilder.enableAnyVal) ++ IArray(buildingComponentRef),
+          parents     = IArray(buildingComponentRef),
           ctors       = IArray(ctor),
           members     = members.distinctBy(_.name.unescaped.toLowerCase),
           classType   = ClassType.Class,

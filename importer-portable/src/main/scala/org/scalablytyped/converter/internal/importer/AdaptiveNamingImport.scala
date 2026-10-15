@@ -8,17 +8,38 @@ import org.scalablytyped.converter.internal.ts._
 
 import scala.collection.mutable
 
-final class AdaptiveNamingImport(private val rewrites: Map[IArray[TsIdent], QualifiedName]) { self =>
+/**
+  * Scala names for a library's TypeScript names.
+  *
+  * @param library the library named
+  * @param own     the library's own names. Every code path starts with the library it is in, so these are the names
+  *                starting with this library, and they are all a converted library needs to keep
+  * @param deps    the naming of every library this one reaches, by library: a name from another library is looked up
+  *                in that library's own names, so no library's names are copied into another's
+  */
+final class AdaptiveNamingImport(
+    val library: TsIdentLibrary,
+    val own:     Map[IArray[TsIdent], QualifiedName],
+    val deps:    Map[TsIdent, AdaptiveNamingImport],
+) {
+  self =>
   def unapply(qident: TsQIdent): Some[QualifiedName] =
     Some(apply(qident))
+
+  private def rewrite(parts: IArray[TsIdent]): Option[QualifiedName] =
+    own.get(parts) match {
+      case found @ Some(_) => found
+      case None            => parts.headOption.flatMap(deps.get).flatMap(_.own.get(parts))
+    }
 
   def apply(qident: TsQIdent): QualifiedName =
     qident match {
       /* hack/shortcut: all qualified idents are fully qualified, which means only abstract things should have length one */
       case TsQIdent(IArray.exactlyOne(one: TsIdentSimple)) => QualifiedName(IArray(ImportName(one)))
-      case TsQIdent(parts) if rewrites.contains(parts) => rewrites(parts)
+      case TsQIdent(parts) if rewrite(parts).isDefined => rewrite(parts).get
       /* this branch is mostly for enum members now, which don't have codepaths */
-      case TsQIdent(IArray.initLast(parent, current: TsIdentSimple)) => rewrites(parent) + ImportName(current)
+      case TsQIdent(IArray.initLast(parent, current: TsIdentSimple)) =>
+        rewrite(parent).getOrElse(throw new NoSuchElementException(s"key not found: $parent")) + ImportName(current)
     }
 
   def apply(cp: CodePath): QualifiedName =
@@ -88,12 +109,14 @@ object AdaptiveNamingImport {
         }
     }
 
-    depsRewrites.foreach { (x: AdaptiveNamingImport) =>
-      registeredReferences ++= x.rewrites
-    }
-
-    new AdaptiveNamingImport(registeredReferences.toMap)
+    new AdaptiveNamingImport(libraryName, registeredReferences.toMap, reached(depsRewrites))
   }
+
+  /** The namings `deps` reach, themselves included, by library. */
+  def reached(deps: IArray[AdaptiveNamingImport]): Map[TsIdent, AdaptiveNamingImport] =
+    deps.toList.foldLeft(Map.empty[TsIdent, AdaptiveNamingImport]) { (acc, dep) =>
+      acc ++ dep.deps + (dep.library -> dep)
+    }
 
   def variantsFor(
       tsIdent:                  TsIdent,

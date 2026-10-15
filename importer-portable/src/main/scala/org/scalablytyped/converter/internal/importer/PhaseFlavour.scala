@@ -3,12 +3,12 @@ package org.scalablytyped.converter.internal.importer
 import com.olvind.logging.Logger
 import org.scalablytyped.converter.internal.phases.{GetDeps, IsCircular, Phase, PhaseRes}
 import org.scalablytyped.converter.internal.scalajs.flavours.FlavourImpl
-import org.scalablytyped.converter.internal.scalajs.{Name, TreeScope}
-import org.scalablytyped.converter.internal.scalajs.transforms.{Mangler, SetPrivateWithin, Sorter}
+import org.scalablytyped.converter.internal.scalajs.{Name, ParentsResolver, TreeScope, Versions}
+import org.scalablytyped.converter.internal.scalajs.transforms.{AlignOverriddenWildcards, AnyArgsToWildcards, Mangler, SetPrivateWithin, Sorter}
 
 import scala.collection.immutable.SortedSet
 
-class PhaseFlavour(flavour: FlavourImpl, maybePrivateWithin: Option[Name])
+class PhaseFlavour(flavour: FlavourImpl, maybePrivateWithin: Option[Name], scalaVersion: Versions.Scala)
     extends Phase[LibTsSource, LibScalaJs, LibScalaJs] {
 
   override def apply(
@@ -31,7 +31,21 @@ class PhaseFlavour(flavour: FlavourImpl, maybePrivateWithin: Option[Name])
 
       val tree0 = lib.packageTree
       val tree1 = flavour.rewrittenTree(originalScope, tree0)
-      val tree2 = Mangler.visitPackageTree(originalScope)(tree1)
+      // after the flavour, which copies member types into varargs and lambda parameters, where `?` is not a type
+      /* Ancestors as they are written out: the dependencies after this phase, with their wildcards. */
+      val flavouredScope = new TreeScope.Root(
+        libName       = lib.scalaName,
+        _dependencies = deps.map { case (_, dep) => dep.scalaName -> dep.packageTree },
+        logger        = logger,
+        pedantic      = false,
+        outputPkg     = flavour.outputPkg,
+      )
+      val tree1b =
+        if (scalaVersion.is3)
+          new AlignOverriddenWildcards(new ParentsResolver)
+            .visitPackageTree(flavouredScope)(AnyArgsToWildcards.visitPackageTree(originalScope)(tree1))
+        else tree1
+      val tree2 = Mangler.visitPackageTree(originalScope)(tree1b)
       val tree3 = maybePrivateWithin.foldLeft(tree2) {
         case (tree, privateWithin) => new SetPrivateWithin(privateWithin).visitPackageTree(originalScope)(tree)
       }

@@ -105,7 +105,7 @@ trait ImporterHarness extends AnyFunSuite {
           ),
           "scala.js",
         )
-        .next(new PhaseFlavour(flavour, maybePrivateWithin), flavour.toString)
+        .next(new PhaseFlavour(flavour, maybePrivateWithin, version.scala), flavour.toString)
         .next(
           new Phase3Compile(
             versions                   = version,
