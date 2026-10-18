@@ -586,6 +586,9 @@ object ExprTree {
   case object undefined extends Lit
   case object Null extends Lit
 
+  /** JavaScript `null` passed where a `js.Any` is expected, which a bare `null` is not under explicit nulls */
+  val JsNull: ExprTree = AsInstanceOf(Null, TypeRef.JsAny)
+
   sealed trait Arg extends ExprTree
   object Arg {
     case class Named(override val name: Name, expr: ExprTree) extends Arg

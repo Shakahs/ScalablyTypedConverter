@@ -702,7 +702,7 @@ class JapgollyGenComponents(
             case Optionality.Null | Optionality.NullOrUndef =>
               val impl = Call(
                 Ref(genStBuilder.set.name),
-                IArray(IArray(StringLit(prop.originalName.unescaped), Null)),
+                IArray(IArray(StringLit(prop.originalName.unescaped), JsNull)),
               )
 
               val name = Name(s"${prop.name.unescaped}Null")

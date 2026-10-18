@@ -84,7 +84,7 @@ object CreatorMethod {
 
       // required null
       case prop @ Prop.Normal(_, _, Optionality.Null, _, _) =>
-        Const(requiredProp(prop, Null))
+        Const(requiredProp(prop, JsNull))
 
       case _ => NotNeeded
     }
@@ -125,7 +125,7 @@ object CreatorMethod {
                 If(
                   pred    = BinaryOp(Ref(prop.name), "!=", Null),
                   ifTrue  = asExpr(AsInstanceOf(Ref(prop.name), tpe)),
-                  ifFalse = Some(Null),
+                  ifFalse = Some(JsNull),
                 ),
               ),
               ParamTree(prop.name, isImplicit = false, isVal = false, tpe, default, NoComments),
@@ -168,7 +168,7 @@ object CreatorMethod {
                       If(
                         pred    = BinaryOp(Ref(prop.name), "!=", Null),
                         ifTrue  = asExpr(AsInstanceOf(Ref(prop.name), tpe)),
-                        ifFalse = Some(Null),
+                        ifFalse = Some(JsNull),
                       ),
                     )
                 }
