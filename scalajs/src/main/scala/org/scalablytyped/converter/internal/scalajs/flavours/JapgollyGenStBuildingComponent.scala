@@ -475,10 +475,11 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
         isOverride = false,
       )
     }
-//    @inline implicit def make[R <: js.Object](comp: StBuildingComponent[R]): japgolly.scalajs.react.vdom.VdomElement =
+//    implicit def make[R <: js.Object](comp: StBuildingComponent[R]): japgolly.scalajs.react.vdom.VdomElement =
 //      japgolly.scalajs.react.vdom.VdomElement(ReactRaw.createElement(comp.stElementType, comp.stProps, comp.stChildren.toSeq*))
 //
-// createElement copies the props and children it is given, so the builder can be built again.
+// createElement copies the props and children it is given, so the builder can be built again. Not inline: inlined into
+// a caller, Scala 3 retypes `stChildren.toSeq` against React.Node dealiased and rejects the js.Array[React.Node] it is.
     val make: MethodTree = {
       val compParam = ParamTree(Name("comp"), false, false, builderRef, NotImplemented, NoComments)
       val name      = Name("make")
@@ -503,7 +504,7 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
       )
 
       MethodTree(
-        IArray(Annotation.Inline),
+        Empty,
         ProtectionLevel.Public,
         name,
         builderTparams,
