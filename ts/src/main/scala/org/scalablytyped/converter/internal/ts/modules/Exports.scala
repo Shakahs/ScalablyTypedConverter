@@ -176,6 +176,8 @@ object Exports {
         exported match {
           case exported @ TsExportee.Names(idents, _) => //
             idents.collectFirst {
+              case tuple @ (_, Some(exportedName)) if wanted.headOption.contains(exportedName) =>
+                PickedExport(e.copy(exported = exported.copy(idents = IArray(tuple))), wanted.tail)
               case tuple @ (TsQIdent(parts), None) if wanted.startsWith(parts) =>
                 PickedExport(e.copy(exported = exported.copy(idents = IArray(tuple))), wanted.drop(parts.length))
             }

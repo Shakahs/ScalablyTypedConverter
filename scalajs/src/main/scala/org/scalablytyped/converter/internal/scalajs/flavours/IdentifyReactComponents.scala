@@ -192,6 +192,11 @@ class IdentifyReactComponents(
                 case (x: TypeAliasTree, newScope) =>
                   val rewritten = FillInTParams(x, newScope, current.targs, Empty)
                   returnsElement(scope, rewritten.alias)
+                case (x: ClassTree, newScope) =>
+                  val rewritten = FillInTParams(x, newScope, current.targs, Empty)
+                  parentsResolver(newScope, rewritten).transitiveParents.firstDefined {
+                    case (parent, _) => returnsElement(newScope, parent)
+                  }
                 case _ => None
               }
         }
@@ -499,9 +504,11 @@ class IdentifyReactComponents(
       val current = scope.stack(idx)
       val base: Option[LocationAnnotation] =
         current match {
-          case cls: ClassTree   => fromAnns(cls.annotations)
-          case mod: ModuleTree  => fromAnns(mod.annotations)
-          case pkg: PackageTree => fromAnns(pkg.annotations)
+          case cls: ClassTree     => fromAnns(cls.annotations)
+          case mod: ModuleTree    => fromAnns(mod.annotations)
+          case pkg: PackageTree   => fromAnns(pkg.annotations)
+          case method: MethodTree => fromAnns(method.annotations)
+          case field: FieldTree   => fromAnns(field.annotations)
           case _ => None
         }
 
