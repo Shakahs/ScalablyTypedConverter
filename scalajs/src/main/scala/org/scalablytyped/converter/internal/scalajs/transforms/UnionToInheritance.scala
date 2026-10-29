@@ -95,9 +95,14 @@ object UnionToInheritance {
       indexedRewrites:      Map[QualifiedName, Rewrite],
       newParentsByCodePath: Map[QualifiedName, IArray[InvertingTypeParamRef]],
   ): ContainerTree = {
-    val newMembers = c.members.flatMap {
+    val newMembers = c.members.distinct.flatMap {
       case p: ContainerTree =>
         IArray(typesToInterfaces(p, indexedRewrites, newParentsByCodePath))
+
+      // Reexports can contribute the same alias with different documentation.
+      // The index already chooses its canonical declaration; emit that one once.
+      case ta: TypeAliasTree if indexedRewrites.get(ta.codePath).exists(_.original =/= ta) =>
+        Empty
 
       case ta: TypeAliasTree if indexedRewrites.contains(ta.codePath) =>
         val commentsOpt = ta.alias match {

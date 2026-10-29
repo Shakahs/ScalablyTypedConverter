@@ -65,7 +65,8 @@ class Erasure(scalaVersion: Versions.Scala) {
       case QualifiedName.INTERSECTION if scalaVersion.is3 =>
         // this is not in the spec, but for instance `foo(String & Double)` clashes with `foo(Double)` regardless of order, etc
         def fromPrimitive = tpe.targs.collectFirst {
-          case tr if TypeRef.Primitive(tr) => tr.typeName
+          // Null and Nothing are bottom types, not primitive value classes.
+          case tr if TypeRef.Primitive(tr) && tr =/= TypeRef.Null && tr =/= TypeRef.Nothing => tr.typeName
         }
 
         def fromClass: Option[QualifiedName] =

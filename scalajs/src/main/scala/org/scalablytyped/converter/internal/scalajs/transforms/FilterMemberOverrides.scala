@@ -151,6 +151,17 @@ class FilterMemberOverrides(erasure: Erasure, parentsResolver: ParentsResolver) 
         inheritedMethodsByBase.get(mBase) match {
           case Some(conflicting @ _)                          => Empty
           case None if inheritedDeclaredBases.contains(mBase) => Empty
+          // A parent type parameter can become this concrete parameter type in a
+          // subclass. Keep both APIs, with distinct Scala names, before that
+          // specialization makes the inherited methods conflict.
+          case _ if inheritedMethodsByName.get(m.name).exists(_.exists { inherited =>
+                val parentParams = inherited.params.flatten
+                val ownParams    = m.params.flatten
+                parentParams.length === ownParams.length && parentParams.zip(ownParams).forall {
+                  case (parentParam, ownParam) =>
+                    parentParam.tpe === ownParam.tpe || scope.isAbstract(parentParam.tpe)
+                }
+              }) => IArray(m.withSuffix("M" + owner.name.value))
           case _                                              => IArray(m)
         }
     }

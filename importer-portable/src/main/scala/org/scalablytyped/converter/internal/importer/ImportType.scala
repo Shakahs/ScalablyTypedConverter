@@ -216,10 +216,8 @@ class ImportType(stdNames: QualifiedName.StdNames) {
                   TsQIdent.Std.Array | TsQIdent.Std.ReadonlyArray | TsQIdent.Array | TsQIdent.ReadonlyArray,
                   IArray.exactlyOne(tpe),
                   ) =>
-                TypeRef(
-                  importName(TsQIdent.Array),
-                  IArray(apply(scope, importName)(TsTypeUnion(rest.map(_.tpe) :+ tpe))).distinct,
-                  labelComment(repeatedElem),
+                apply(scope, importName)(
+                  TsTypeRef(labelComment(repeatedElem), TsQIdent.Array, IArray(TsTypeUnion(rest.map(_.tpe) :+ tpe))),
                 )
               case other =>
                 val c = Comment.warning(s"repeated non-array type: ${TsTypeFormatter(other)}")
