@@ -51,7 +51,7 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
   val ctorParams: IArray[ParamTree] =
     IArray(
       ParamTree(elementType.name, isImplicit = false, isVal = true, ElementType, NotImplemented, NoComments),
-      ParamTree(props.name, isImplicit = false, isVal = true, TypeRef.JsObject, NotImplemented, NoComments),
+      ParamTree(props.name, isImplicit       = false, isVal = true, TypeRef.JsObject, NotImplemented, NoComments),
       ParamTree(
         children.name,
         isImplicit = false,
@@ -451,7 +451,14 @@ class JapgollyGenStBuildingComponent(val outputPkg: Name, val scalaVersion: Vers
           IArray(
             ParamTree(Name("elementType"), false, false, ElementType, NotImplemented, NoComments),
             ParamTree(Name("props"), false, false, TypeRef.JsObject, NotImplemented, NoComments),
-            ParamTree(Name("children"), false, false, TypeRef.Repeated(ReactNode, NoComments), NotImplemented, NoComments),
+            ParamTree(
+              Name("children"),
+              false,
+              false,
+              TypeRef.Repeated(ReactNode, NoComments),
+              NotImplemented,
+              NoComments,
+            ),
           ),
         ),
         impl       = ExprTree.native,

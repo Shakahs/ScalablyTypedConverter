@@ -43,7 +43,7 @@ object AnyArgsToWildcards extends TreeTransformation {
   private def namesClass(scope: TreeScope, name: QualifiedName): Boolean =
     scope.lookup(name).exists {
       case (_: ClassTree, _) => true
-      case _                 => false
+      case _ => false
     }
 
   /* The stack starts with this type reference and any it is an argument of. A lambda's parameter is typed like the
@@ -52,16 +52,16 @@ object AnyArgsToWildcards extends TreeTransformation {
   private def inParentOrExpr(scope: TreeScope): Boolean = {
     val owner = scope.stack.dropWhile {
       case _: TypeRef => true
-      case _          => false
+      case _ => false
     }
     val inExpr = owner.exists {
       case _: ExprTree => true
-      case _           => false
+      case _ => false
     }
     owner.headOption match {
       case Some(_: InheritanceTree) => true
       case Some(_: ParamTree)       => inExpr && !owner.lift(1).exists(_.isInstanceOf[ExprTree.Lambda])
-      case _                        => inExpr
+      case _ => inExpr
     }
   }
 }

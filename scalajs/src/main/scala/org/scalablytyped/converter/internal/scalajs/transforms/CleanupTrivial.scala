@@ -40,6 +40,6 @@ object CleanupTrivial extends TreeTransformation {
   def removeTrivial(members: IArray[Tree], keepTypeAliases: Boolean): IArray[Tree] =
     members.filterNot {
       case _: TypeAliasTree if keepTypeAliases => false
-      case x                                   => x.comments.has[Marker.IsTrivial.type]
+      case x => x.comments.has[Marker.IsTrivial.type]
     }
 }

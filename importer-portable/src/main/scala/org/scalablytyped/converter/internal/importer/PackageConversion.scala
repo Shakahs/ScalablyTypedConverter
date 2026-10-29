@@ -72,7 +72,7 @@ object PackageConversion {
     val stdLib: LibTsSource.StdLibSource =
       known.get(TsIdent.std) match {
         case Some(std: LibTsSource.StdLibSource) => std
-        case _                                   => return Left("The interface of std must be given, or std converted")
+        case _ => return Left("The interface of std must be given, or std converted")
       }
 
     val resolver = new LibraryResolver(
@@ -85,7 +85,9 @@ object PackageConversion {
     def fromInterfaces[T](result: TsIdentLibrary => T): GetDeps[LibTsSource, T] =
       wanted =>
         PhaseRes.Ok(
-          SortedMap.from(wanted.toList.collect { case source if linked.contains(source) => source -> result(source.libName) }),
+          SortedMap.from(wanted.toList.collect {
+            case source if linked.contains(source) => source -> result(source.libName)
+          }),
         )
 
     val phase1 = new Phase1ReadTypescript(
@@ -128,19 +130,21 @@ object PackageConversion {
           ),
         )
       } yield PackageInterface.Converted(
-        libName             = libName,
-        isStdLib            = scala.isStdLib,
-        tsVersion           = ts.version,
-        parsed              = ts.parsed,
-        tsDependencies      = IArray.fromTraversable(ts.dependencies.keys.map(_.libName)),
-        scalaLibName        = scala.libName,
-        scalaName           = scala.scalaName,
-        scalaVersion        = scala.libVersion,
-        scalaTree           = scala.packageTree,
-        scalaDependencies   = IArray.fromTraversable(scala.dependencies.keys.toList.sortBy(_.libName.value).map(_.libName)),
-        names               = scala.names.own,
-        flavourTree         = flavoured.packageTree,
-        flavourDependencies = IArray.fromTraversable(flavoured.dependencies.keys.toList.sortBy(_.libName.value).map(_.libName)),
+        libName        = libName,
+        isStdLib       = scala.isStdLib,
+        tsVersion      = ts.version,
+        parsed         = ts.parsed,
+        tsDependencies = IArray.fromTraversable(ts.dependencies.keys.map(_.libName)),
+        scalaLibName   = scala.libName,
+        scalaName      = scala.scalaName,
+        scalaVersion   = scala.libVersion,
+        scalaTree      = scala.packageTree,
+        scalaDependencies =
+          IArray.fromTraversable(scala.dependencies.keys.toList.sortBy(_.libName.value).map(_.libName)),
+        names       = scala.names.own,
+        flavourTree = flavoured.packageTree,
+        flavourDependencies =
+          IArray.fromTraversable(flavoured.dependencies.keys.toList.sortBy(_.libName.value).map(_.libName)),
       )
 
     val written = result match {

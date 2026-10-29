@@ -181,8 +181,7 @@ object Bootstrap {
     libs.toVector
       .map(libraryResolver.library)
       .partitionCollect2[LibTsSource, TsIdentLibrary, Array](
-        { case LibraryResolver.Found(x) => x },
-        { case LibraryResolver.NotAvailable(name) => name },
+        { case LibraryResolver.Found(x) => x }, { case LibraryResolver.NotAvailable(name) => name },
       ) match {
       case (allFound, notAvailable, _) if notAvailable.isEmpty => Right(allFound.toVector)
       case (_, notAvailable, _)                                => Left(Unresolved(notAvailable.toVector))
