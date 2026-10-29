@@ -23,7 +23,7 @@ class PhaseFlavour(flavour: FlavourImpl, maybePrivateWithin: Option[Name], scala
     getDeps(SortedSet.empty[LibTsSource] ++ (lib.dependencies.keys: Iterable[LibTsSource])).map { deps =>
       val originalScope = new TreeScope.Root(
         libName       = lib.scalaName,
-        _dependencies = lib.dependencies.map { case (_, lib) => lib.scalaName -> lib.packageTree },
+        _dependencies = LibScalaJs.resolveDependencyTrees(lib.dependencies),
         logger        = logger,
         pedantic      = false,
         outputPkg     = flavour.outputPkg,
@@ -35,7 +35,7 @@ class PhaseFlavour(flavour: FlavourImpl, maybePrivateWithin: Option[Name], scala
       /* Ancestors as they are written out: the dependencies after this phase, with their wildcards. */
       val flavouredScope = new TreeScope.Root(
         libName       = lib.scalaName,
-        _dependencies = deps.map { case (_, dep) => dep.scalaName -> dep.packageTree },
+        _dependencies = LibScalaJs.resolveDependencyTrees(deps),
         logger        = logger,
         pedantic      = false,
         outputPkg     = flavour.outputPkg,

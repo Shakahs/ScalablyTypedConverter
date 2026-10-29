@@ -15,6 +15,7 @@ class ImportTree(
     importExpr:           ImportExpr,
     enableScalaJsDefined: Boolean,
     scalaVersion:         Versions.Scala,
+    resolveRuntimeModule: TsIdentModule => String = _.value,
 ) {
   def apply(lib: LibTs, logger: Logger[Unit]): PackageTree = {
     val deps = lib.transitiveDependencies.map {
@@ -134,7 +135,7 @@ class ImportTree(
           }
         }
 
-        val anns          = ImportJsLocation(jsLocation)
+        val anns          = ImportJsLocation(jsLocation, resolveRuntimeModule)
         val fieldComments = tpeOpt.flatMap(extractInnerFunctionMarker(scope, _)).fold(cs)(m => cs + m)
 
         /* need to reach well known symbols through a stable path */
@@ -168,7 +169,7 @@ class ImportTree(
         }
 
       case e: TsDeclEnum =>
-        ImportEnum(e, ImportJsLocation(e.jsLocation), scope, importName, importType, illegalNames, importExpr)
+        ImportEnum(e, ImportJsLocation(e.jsLocation, resolveRuntimeModule), scope, importName, importType, illegalNames, importExpr)
 
       case TsDeclClass(cs, _, isAbstract, _, tparams, parent, implements, members, location, codePath) =>
         val newCodePath = importName(codePath)
@@ -185,7 +186,7 @@ class ImportTree(
           case Some(static) => decl(scope)(static)
           case None         => Empty
         }
-        val anns    = ImportJsLocation(location)
+        val anns    = ImportJsLocation(location, resolveRuntimeModule)
         val parents = (IArray.fromOption(parent) ++ implements).map(importType(scope, importName))
 
         val abstractComment = if (isAbstract) Comments("/* note: abstract class */") else NoComments
@@ -315,7 +316,7 @@ class ImportTree(
               def throughAlias =
                 scope.lookupTypeIncludeScope(tr.name, skipValidation = true).exists {
                   case (ta: TsDeclTypeAlias, aliasScope) => go(aliasScope, ta.alias)
-                  case _                                 => false
+                  case _ => false
                 }
 
               tr.name == self || (visited.add(tr.name) && throughAlias)
@@ -481,7 +482,7 @@ class ImportTree(
             scope          = scope,
             level          = ProtectionLevel.Public,
             name           = name,
-            annotations    = ImportJsLocation(jsLocation),
+            annotations    = ImportJsLocation(jsLocation, resolveRuntimeModule),
             cs             = cs,
             methodType     = MethodType.Normal,
             sig            = sig,
@@ -911,7 +912,7 @@ class ImportTree(
         setCodePath(
           importedCp,
           ModuleTree(
-            annotations = ImportJsLocation(jsLocation),
+            annotations = ImportJsLocation(jsLocation, resolveRuntimeModule),
             level       = ProtectionLevel.Public,
             name        = importedCp.parts.last,
             parents     = inheritance,

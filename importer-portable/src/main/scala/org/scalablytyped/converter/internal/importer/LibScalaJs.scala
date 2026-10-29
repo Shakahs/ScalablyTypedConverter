@@ -16,6 +16,11 @@ case class LibScalaJs(source: LibTsSource)(
 ) extends TreeScope.Lib
 
 object LibScalaJs {
+
+  /** Ancestors can be declared in a transitive dependency behind a package re-export. */
+  def resolveDependencyTrees(dependencies: Map[LibTsSource, LibScalaJs]): Map[Name, PackageTree] =
+    Unpack(SortedMap.from(dependencies)).valuesIterator.map(lib => lib.scalaName -> lib.packageTree).toMap
+
   object Unpack {
     def unapply(m: SortedMap[LibTsSource, LibScalaJs]): Some[SortedMap[LibTsSource, LibScalaJs]] =
       Some(apply(m))

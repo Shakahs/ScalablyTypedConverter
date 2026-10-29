@@ -432,6 +432,13 @@ object ImportScalaDefinitions extends App {
         val codePath               = QualifiedName(processName(m.path))
         val name                   = Name(processName(m.name))
 
+        def hasParameterList(infoType: Type): Boolean = infoType match {
+          case NullaryMethodType(_) => false
+          case PolyType(inner, _) => hasParameterList(inner)
+          case AnnotatedType(inner, _) => hasParameterList(inner)
+          case _ => true
+        }
+
         val tree = if (m.isMethod && !(m.isAccessor && params.isEmpty)) {
           val level =
             if (m.isPrivate) ProtectionLevel.Private(None)
@@ -446,7 +453,7 @@ object ImportScalaDefinitions extends App {
               level       = level,
               name        = name,
               tparams     = tparams,
-              params      = IArray(params),
+              params      = if (hasParameterList(m.infoType)) IArray(params) else Empty,
               impl        = ExprTree.native,
               resultType  = ret,
               isOverride  = m.isOverride,

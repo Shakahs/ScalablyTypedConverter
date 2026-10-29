@@ -49,7 +49,7 @@ class Phase2ToScalaJs(
 
       val scope = new TreeScope.Root(
         libName       = scalaName,
-        _dependencies = scalaDeps.map { case (_, l) => l.scalaName -> l.packageTree },
+        _dependencies = LibScalaJs.resolveDependencyTrees(scalaDeps),
         logger        = logger,
         pedantic      = pedantic,
         outputPkg     = outputPkg,
@@ -106,6 +106,7 @@ class Phase2ToScalaJs(
         new ImportExpr(importType, importName),
         enableScalaJsDefined(tsLibrary.name),
         scalaVersion,
+        RuntimeModuleResolver(tsLibrary.transitiveDependencies.keys.toList :+ source),
       )
 
       val (scalaTree, importMs) = timed(importTree(tsLibrary, logger))

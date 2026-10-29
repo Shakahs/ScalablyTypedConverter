@@ -44,7 +44,7 @@ class Phase3Sources(
     getDeps(SortedSet.empty[LibTsSource] ++ lib.dependencies.keys.map(x => x: LibTsSource)).map { deps =>
       val scope = new TreeScope.Root(
         libName       = lib.scalaName,
-        _dependencies = lib.dependencies.map { case (_, lib) => lib.scalaName -> lib.packageTree },
+        _dependencies = LibScalaJs.resolveDependencyTrees(lib.dependencies),
         logger        = logger,
         pedantic      = false,
         outputPkg     = flavour.outputPkg,

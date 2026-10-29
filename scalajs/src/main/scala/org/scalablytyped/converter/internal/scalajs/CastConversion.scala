@@ -63,8 +63,29 @@ object CastConversion {
       }
 
     override def leaveTypeRef(scope: TreeScope)(original: TypeRef): TypeRef =
-      if (isInheritanceClause(scope)) original
-      else
+      if (isInheritanceClause(scope)) {
+        // Native classes may extend the runtime class represented by a replacement facade.
+        // Traits still need their original parents: Scala traits cannot extend JS classes.
+        val nativeClass = scope.owner.exists {
+          case cls: ClassTree => cls.isNative && cls.classType === ClassType.Class
+          case _ => false
+        }
+        // Preserve the source library's own definitions. Replacing their parents changes
+        // the definitions being mapped, rather than a consumer's use of those definitions.
+        val externalParent = !(original.typeName.parts.take(2) === IArray(scope.outputPkg, scope.libName))
+        if (nativeClass && externalParent)
+          maybeRewrite(original, scope)
+            .filter { replacement =>
+              ScalaJsClasses.ScalaJsTypes.get(replacement.typeName).exists {
+                case cls: ClassTree =>
+                  cls.isNative && cls.classType === ClassType.Class &&
+                    (cls.ctors.isEmpty || cls.ctors.exists(_.params.isEmpty))
+                case _ => false
+              }
+            }
+            .getOrElse(original)
+        else original
+      } else
         maybeRewrite(original, scope).orElse(maybeRewrite(FollowAliases(scope)(original), scope)) match {
           case Some(rewritten) => rewritten
           case None =>
