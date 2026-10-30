@@ -4,7 +4,7 @@ import com.olvind.logging.Logger
 import org.scalablytyped.converter.internal.phases.{GetDeps, IsCircular, Phase, PhaseRes}
 import org.scalablytyped.converter.internal.scalajs.flavours.FlavourImpl
 import org.scalablytyped.converter.internal.scalajs.{Name, ParentsResolver, TreeScope, Versions}
-import org.scalablytyped.converter.internal.scalajs.transforms.{AlignOverriddenWildcards, AnyArgsToWildcards, Mangler, SetPrivateWithin, Sorter}
+import org.scalablytyped.converter.internal.scalajs.transforms.{AlignOverriddenWildcards, AnyArgsToWildcards, Mangler, NativeValsAsDefs, SetPrivateWithin, Sorter}
 
 import scala.collection.immutable.SortedSet
 
@@ -49,7 +49,8 @@ class PhaseFlavour(flavour: FlavourImpl, maybePrivateWithin: Option[Name], scala
       val tree3 = maybePrivateWithin.foldLeft(tree2) {
         case (tree, privateWithin) => new SetPrivateWithin(privateWithin).visitPackageTree(originalScope)(tree)
       }
-      val tree4 = Sorter.visitPackageTree(originalScope)(tree3)
+      // last: the flavour finds React components among the vals it would turn into defs
+      val tree4 = (NativeValsAsDefs >> Sorter).visitPackageTree(originalScope)(tree3)
 
       LibScalaJs(lib.source)(
         libName      = lib.libName,
