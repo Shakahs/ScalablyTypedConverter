@@ -443,10 +443,12 @@ object TypeRef {
         }.distinct
       }
 
+      /* `?` is no type a union can hold; a union with an unknown member is unknown (`Foo[?] | Foo[A]` => `Foo[?]`) */
       val ret = compressed match {
-        case Empty                  => TypeRef.Nothing
-        case IArray.exactlyOne(one) => one
-        case more                   => TypeRef(QualifiedName.UNION, more, NoComments)
+        case Empty                                                                          => TypeRef.Nothing
+        case IArray.exactlyOne(one)                                                         => one
+        case more if more.exists(_.typeName === QualifiedName.WILDCARD)                     => TypeRef.Wildcard
+        case more                                                                           => TypeRef(QualifiedName.UNION, more, NoComments)
       }
       ret.withComments(comments)
     }

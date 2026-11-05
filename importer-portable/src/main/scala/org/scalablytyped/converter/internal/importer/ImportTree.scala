@@ -235,7 +235,8 @@ class ImportTree(
 
         val newCodePath = importName(codePath)
         val MemberRet(ctors, ms, extraInheritance, cs2) =
-          members.flatMap(tsMember(scope, isScalaJsDefined, newCodePath))
+          (if (isScalaJsDefined) withoutExpandedMethods(members) else members)
+            .flatMap(tsMember(scope, isScalaJsDefined, newCodePath))
         val parents = inheritance.map(importType(scope, importName))
 
         IArray(
@@ -703,7 +704,7 @@ class ImportTree(
 
         IArray
           .fromOption(
-            hack(
+            hack(scalaJsDefined)(
               FieldTree(
                 annotations = IArray.fromOption(annOpt),
                 level       = ProtectionLevel.Public,
@@ -781,9 +782,24 @@ class ImportTree(
     }
   }
 
-  def hack(f: FieldTree): Option[FieldTree] =
+  /**
+    * A user-implemented trait cannot carry both the methods `ExpandCallables` derives from a function-typed property and
+    * that property under the same JS name: Scala.js refuses a class with conflicting properties and methods. Such a trait
+    * keeps the property alone, which [[hack]] then leaves under its own name.
+    */
+  def withoutExpandedMethods(members: IArray[TsMember]): IArray[TsMember] = {
+    val expanded: Set[TsIdent] =
+      members.collect { case p: TsMemberProperty if p.comments.has[Marker.ExpandedCallables.type] => p.name }.toSet
+    members.filterNot {
+      case f: TsMemberFunction => expanded(f.name)
+      case _ => false
+    }
+  }
+
+  def hack(scalaJsDefined: Boolean)(f: FieldTree): Option[FieldTree] =
     f.comments.extract { case Marker.ExpandedCallables => () } match {
       case None => Some(f)
+      case Some(_) if scalaJsDefined => Some(f)
       case Some((_, _)) =>
         if (f.name === Name.namespaced) None
         else Some(f.withSuffix("Original"))
