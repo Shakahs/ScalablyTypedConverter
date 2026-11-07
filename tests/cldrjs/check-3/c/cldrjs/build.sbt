@@ -1,7 +1,7 @@
 organization := "org.scalablytyped"
 name := "cldrjs"
 version := "0.4.4-742b6f"
-scalaVersion := "3.9.0"
+scalaVersion := "3.10.0"
 enablePlugins(ScalaJSPlugin)
 libraryDependencies ++= Seq(
   "com.olvind" %%% "scalablytyped-runtime" % "2.4.2",

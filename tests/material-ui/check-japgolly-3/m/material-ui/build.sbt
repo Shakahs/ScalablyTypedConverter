@@ -1,7 +1,7 @@
 organization := "org.scalablytyped"
 name := "material-ui"
 version := "0.0-unknown-35281a"
-scalaVersion := "3.9.0"
+scalaVersion := "3.10.0"
 enablePlugins(ScalaJSPlugin)
 libraryDependencies ++= Seq(
   "com.github.japgolly.scalajs-react" %%% "core" % "4.0.0",

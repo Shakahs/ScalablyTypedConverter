@@ -97,7 +97,7 @@ write_file(
         "",
         "object BuildInfo {",
         '  val scala213: String = "2.13.16"',
-        '  val scala3: String = "3.9.0"',
+        '  val scala3: String = "3.10.0"',
         '  val scalaJs: String = "1.22.0"',
         "}",
         "",

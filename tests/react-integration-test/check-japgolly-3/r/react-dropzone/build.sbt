@@ -1,7 +1,7 @@
 organization := "org.scalablytyped"
 name := "react-dropzone"
 version := "10.1.10-253ac9"
-scalaVersion := "3.9.0"
+scalaVersion := "3.10.0"
 enablePlugins(ScalaJSPlugin)
 libraryDependencies ++= Seq(
   "com.github.japgolly.scalajs-react" %%% "core" % "4.0.0",

@@ -1,7 +1,7 @@
 organization := "org.scalablytyped"
 name := "conditional-type-cycle"
 version := "0.0-unknown-5d93d0"
-scalaVersion := "3.9.0"
+scalaVersion := "3.10.0"
 enablePlugins(ScalaJSPlugin)
 libraryDependencies ++= Seq(
   "com.olvind" %%% "scalablytyped-runtime" % "2.4.2",

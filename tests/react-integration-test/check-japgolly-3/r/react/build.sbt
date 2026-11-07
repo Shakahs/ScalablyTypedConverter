@@ -1,7 +1,7 @@
 organization := "org.scalablytyped"
 name := "react"
 version := "16.9.2-3be24e"
-scalaVersion := "3.9.0"
+scalaVersion := "3.10.0"
 enablePlugins(ScalaJSPlugin)
 libraryDependencies ++= Seq(
   "com.github.japgolly.scalajs-react" %%% "core" % "4.0.0",

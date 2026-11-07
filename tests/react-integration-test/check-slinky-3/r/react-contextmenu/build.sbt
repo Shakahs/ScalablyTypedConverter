@@ -1,7 +1,7 @@
 organization := "org.scalablytyped"
 name := "react-contextmenu"
 version := "2.13.0-754372"
-scalaVersion := "3.9.0"
+scalaVersion := "3.10.0"
 enablePlugins(ScalaJSPlugin)
 libraryDependencies ++= Seq(
   "com.olvind" %%% "scalablytyped-runtime" % "2.4.2",

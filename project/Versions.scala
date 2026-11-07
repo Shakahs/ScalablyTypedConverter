@@ -1,5 +1,5 @@
 object Versions {
   val scala213 = "2.13.16"
-  val scala3   = "3.9.0"
+  val scala3   = "3.10.0"
   val scalaJs  = "1.22.0"
 }
