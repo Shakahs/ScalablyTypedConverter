@@ -17,6 +17,7 @@
 
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rules_scala//scala:scala.bzl", "scala_binary", "scala_library")
+load("//tools/lint:starlark_sources.bzl", "starlark_sources")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -206,3 +207,5 @@ scala_binary(
         "@maven//:com_github_scopt_scopt_3",
     ],
 )
+
+starlark_sources(name = "starlark_sources")
